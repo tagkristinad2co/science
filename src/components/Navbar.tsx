@@ -3,10 +3,9 @@ import React from 'react';
 interface NavbarProps {
   currentView: 'home' | 'sample';
   onNavigate: (view: 'home' | 'sample', hash?: string) => void;
-  onCheckout: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onCheckout }) => {
+export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate }) => {
   return (
     <>
       <a className="skip" href="#main">
@@ -14,7 +13,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onCheck
       </a>
       <div className="notice">
         {currentView === 'home' ? (
-          <>✨ Printable digital resource · <b>50 illustrated sheets</b> · One-time purchase</>
+          <>✨ Printable digital resource · <b>100 illustrated sheets</b> · Upgrade to 200 for +RM10</>
         ) : (
           <>🎁 Free printable science resources · <b>5 real sheets</b> from our collection</>
         )}
@@ -66,7 +65,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onCheck
                 <button
                   type="button"
                   className="btn"
-                  onClick={onCheckout}
+                  onClick={() => onNavigate('home', 'pricing')}
                 >
                   Get the pack →
                 </button>
@@ -85,7 +84,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onCheck
                   className="nav-link-btn"
                   onClick={() => onNavigate('home', 'inside')}
                 >
-                  Preview 50-sheet pack
+                  Preview 100-sheet pack
                 </button>
                 <button
                   type="button"

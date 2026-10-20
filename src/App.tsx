@@ -46,6 +46,29 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('hashchange', handleHash);
   }, []);
 
+  // Sync title and meta description for both pages
+  useEffect(() => {
+    if (currentView === 'home') {
+      document.title = 'Science Made Visual | 100 Illustrated Science Study Sheets';
+      const metaDesc = document.querySelector('meta[name="description"]');
+      if (metaDesc) {
+        metaDesc.setAttribute(
+          'content',
+          'Discover 100 colorful illustrated science study sheets covering biology, chemistry, physics and Earth science. Printable PDF. RM39.90 one-time.'
+        );
+      }
+    } else {
+      document.title = 'Free Science Study Sheets | Science Made Visual';
+      const metaDesc = document.querySelector('meta[name="description"]');
+      if (metaDesc) {
+        metaDesc.setAttribute(
+          'content',
+          'Try 5 free genuine illustrated science study sheets. Printable PDF sample from Science Made Visual.'
+        );
+      }
+    }
+  }, [currentView]);
+
   const handleNavigate = (view: 'home' | 'sample', hash?: string) => {
     setCurrentView(view);
     if (view === 'sample') {
@@ -67,12 +90,15 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleCheckout = () => {
-    if (isSecureUrl(config.checkoutUrl)) {
-      window.location.href = config.checkoutUrl;
+  const handleCheckout = (includeUpgrade: boolean = false) => {
+    const targetUrl = includeUpgrade ? config.bundleCheckoutUrl : config.checkoutUrl;
+    if (isSecureUrl(targetUrl)) {
+      window.location.href = targetUrl;
     } else {
       setToastMessage(
-        'Checkout is not connected yet. Site owner: add the live payment link to checkoutUrl in config.js.'
+        includeUpgrade
+          ? 'Checkout is not connected yet. Site owner: add the live payment link to bundleCheckoutUrl in config.js.'
+          : 'Checkout is not connected yet. Site owner: add the live payment link to checkoutUrl in config.js.'
       );
     }
   };
@@ -80,24 +106,39 @@ export const App: React.FC = () => {
   const handleOpenPolicy = (type: PolicyType) => {
     if (!type) return;
 
-    if (type === 'privacy' && isSecureUrl(config.privacyUrl)) {
-      window.location.href = config.privacyUrl;
+    if (type === 'privacy') {
+      if (isSecureUrl(config.privacyUrl)) {
+        window.location.href = config.privacyUrl;
+      } else {
+        setToastMessage('This link has not been configured yet. Site owner: update config.js.');
+      }
       return;
     }
-    if (type === 'terms' && isSecureUrl(config.termsUrl)) {
-      window.location.href = config.termsUrl;
+    if (type === 'terms') {
+      if (isSecureUrl(config.termsUrl)) {
+        window.location.href = config.termsUrl;
+      } else {
+        setToastMessage('This link has not been configured yet. Site owner: update config.js.');
+      }
       return;
     }
-    if (type === 'refund' && isSecureUrl(config.refundUrl)) {
-      window.location.href = config.refundUrl;
+    if (type === 'refund') {
+      if (isSecureUrl(config.refundUrl)) {
+        window.location.href = config.refundUrl;
+      } else {
+        setToastMessage('This link has not been configured yet. Site owner: update config.js.');
+      }
       return;
     }
-    if (type === 'contact' && isValidEmail(config.supportEmail)) {
-      window.location.href = `mailto:${config.supportEmail}`;
+    if (type === 'contact') {
+      if (isValidEmail(config.supportEmail)) {
+        window.location.href = `mailto:${config.supportEmail}`;
+      } else {
+        setToastMessage('This link has not been configured yet. Site owner: update config.js.');
+      }
       return;
     }
 
-    // Fallback: Display built-in accessible policy dialog
     setActivePolicy(type);
   };
 
@@ -116,13 +157,12 @@ export const App: React.FC = () => {
       <Navbar
         currentView={currentView}
         onNavigate={handleNavigate}
-        onCheckout={handleCheckout}
       />
 
       {currentView === 'home' ? (
         <main id="main">
           <Hero
-            onCheckout={handleCheckout}
+            onScrollToPricing={() => handleNavigate('home', 'pricing')}
             onGoToSample={() => handleNavigate('sample')}
             onPreviewImage={handlePreviewCustomImage}
           />
@@ -132,7 +172,8 @@ export const App: React.FC = () => {
           <Topics />
           <Pricing
             onCheckout={handleCheckout}
-            price={config.productPrice || '$12.99'}
+            basePrice={config.productPrice || 'RM39.90'}
+            bundlePrice={config.bundlePrice || 'RM49.90'}
           />
           <FAQ />
         </main>
@@ -153,8 +194,8 @@ export const App: React.FC = () => {
 
       {currentView === 'home' && (
         <StickyBar
-          onCheckout={handleCheckout}
-          price={config.productPrice || '$12.99'}
+          onScrollToPricing={() => handleNavigate('home', 'pricing')}
+          price={config.productPrice || 'RM39.90'}
         />
       )}
 

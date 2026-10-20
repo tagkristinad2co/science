@@ -150,12 +150,14 @@ export const FAQ_ITEMS: FAQItem[] = [
     answer: 'It is a supplemental reference collection. We do not claim formal alignment with any particular national curriculum or exam board.',
   },
   {
-    question: 'Am I receiving 100 pages?',
-    answer: "No. The current Founder's Edition contains 50 sheets. A 100-sheet edition is planned but not part of this purchase.",
+    question: 'How many sheets are included?',
+    answer:
+      'The standard pack has 100 original illustrated science sheets for RM39.90. Tick the add-on at checkout to get another 100 sheets (200 in total) for just RM10 more.',
   },
   {
     question: 'Can I share it with my class?',
-    answer: 'The $12.99 price is for personal/household study only. Classroom redistribution and resale are not included.',
+    answer:
+      'The pack is for personal/household study only. Classroom redistribution and resale are not included.',
   },
   {
     question: 'How do I get access?',

@@ -252,7 +252,7 @@ export const FreeSamplePage: React.FC<FreeSamplePageProps> = ({
           <div className="mini-title">Love your free sample?</div>
           <h2>There's more science to explore.</h2>
           <p className="section-intro">
-            The 50-sheet Founder's Edition is ready for more exciting topics from
+            The 100-sheet Founder's Edition is ready for more exciting topics from
             biology, chemistry, physics and Earth science.
           </p>
           <button
@@ -260,7 +260,7 @@ export const FreeSamplePage: React.FC<FreeSamplePageProps> = ({
             className="btn"
             onClick={() => onNavigateHome('pricing')}
           >
-            See the full 50-sheet collection — {config.productPrice || '$12.99'} →
+            See the full 100-sheet collection — {config.productPrice || 'RM39.90'} →
           </button>
         </div>
       </section>

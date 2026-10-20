@@ -13,7 +13,7 @@ export const Gallery: React.FC<GalleryProps> = ({ onSelectSheet }) => {
           <div className="mini-title">Real pages from the collection</div>
           <h2>Here's what your science pack looks like.</h2>
           <p className="section-intro">
-            Explore genuine page previews from the uploaded 50-sheet collection.
+            Explore genuine page previews from the uploaded 100-sheet collection.
             Tap any sheet to enlarge it. Online previews are watermarked; your
             purchased PDFs are not.
           </p>

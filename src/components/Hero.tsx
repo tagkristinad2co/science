@@ -1,12 +1,12 @@
 import React from 'react';
 
 interface HeroProps {
-  onCheckout: () => void;
+  onScrollToPricing: () => void;
   onGoToSample: () => void;
   onPreviewImage: (image: string, title: string, alt: string) => void;
 }
 
-export const Hero: React.FC<HeroProps> = ({ onCheckout, onGoToSample, onPreviewImage }) => {
+export const Hero: React.FC<HeroProps> = ({ onScrollToPricing, onGoToSample, onPreviewImage }) => {
   return (
     <section className="hero">
       <div className="shell hero-inner">
@@ -18,13 +18,13 @@ export const Hero: React.FC<HeroProps> = ({ onCheckout, onGoToSample, onPreviewI
             <em>Made visual.</em>
           </h1>
           <p className="lead">
-            Explore fascinating science concepts with 50 colorful, illustrated study
+            Explore fascinating science concepts with 100 colorful, illustrated study
             sheets. Less searching through pages of text. More diagrams, labels and
             ideas to explore at your own pace.
           </p>
           <div className="cta-row">
-            <button type="button" className="btn" onClick={onCheckout}>
-              Get all 50 sheets — $12.99 →
+            <button type="button" className="btn" onClick={onScrollToPricing}>
+              Get 100 sheets — RM39.90 →
             </button>
             <button
               type="button"
@@ -36,7 +36,7 @@ export const Hero: React.FC<HeroProps> = ({ onCheckout, onGoToSample, onPreviewI
           </div>
           <div className="trust">
             <span>Instant digital download</span>
-            <span>Print or view on screen</span>
+            <span>Pay with FPX online banking or card</span>
             <span>One-time payment</span>
           </div>
         </div>
@@ -98,7 +98,7 @@ export const Hero: React.FC<HeroProps> = ({ onCheckout, onGoToSample, onPreviewI
               loading="eager"
             />
           </div>
-          <div className="float one">🔬 50 illustrated sheets</div>
+          <div className="float one">🔬 100+ illustrated sheets</div>
           <div className="float two">🌎 Biology · Chemistry · Physics · Earth</div>
         </div>
       </div>

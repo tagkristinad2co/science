@@ -1,6 +1,6 @@
 # Science Made Visual (React + TypeScript + Vite)
 
-A modern, responsive React application showcasing the **Science Made Visual** 50-sheet illustrated study collection covering Biology, Chemistry, Physics, and Earth Science.
+A modern, responsive React application showcasing the **Science Made Visual** 100-sheet illustrated study collection covering Biology, Chemistry, Physics, and Earth Science (with optional +RM10 upgrade to 200 sheets).
 
 ## Features Ported
 - **Direct-Response Sales Experience**: Full landing page layout with hero visual stack, benefits, topic overviews, Founder's Edition pricing card, and collapsible FAQ.

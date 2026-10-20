@@ -1,6 +1,6 @@
 {
   "name": "Science Made Visual",
-  "description": "50 colorful illustrated science study sheets covering biology, chemistry, physics, and Earth science. Printable digital resource.",
+  "description": "100 colorful illustrated science study sheets covering biology, chemistry, physics, and Earth science. Printable digital resource.",
   "permissions": [],
   "capabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
