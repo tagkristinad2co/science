@@ -13,27 +13,37 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({
   onScrollToPricing,
 }) => {
   const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
+  const hasSheet = Boolean(sheet);
+
+  // 1. Focus effect: runs ONLY once when the modal opens
   useEffect(() => {
-    if (sheet) {
-      document.body.style.overflow = 'hidden';
-      closeBtnRef.current?.focus();
-
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          onClose();
-        }
-      };
-
-      window.addEventListener('keydown', handleKeyDown);
-      return () => {
-        document.body.style.overflow = '';
-        window.removeEventListener('keydown', handleKeyDown);
-      };
-    } else {
-      document.body.style.overflow = '';
+    if (hasSheet) {
+      const timer = setTimeout(() => closeBtnRef.current?.focus(), 50);
+      return () => clearTimeout(timer);
     }
-  }, [sheet, onClose]);
+  }, [hasSheet]);
+
+  // 2. Escape key and body scroll lock: independent of onClose reference
+  useEffect(() => {
+    if (!sheet) return;
+
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onCloseRef.current();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [sheet]);
 
   if (!sheet) return null;
 

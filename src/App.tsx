@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { config, isSecureUrl } from './config';
 import { SheetPreview, getFaqItems } from './data/content';
 import { useFoundingTimer } from './hooks/useFoundingTimer';
@@ -213,6 +213,22 @@ export const App: React.FC = () => {
     }, 100);
   };
 
+  const handleCloseCheckoutModal = useCallback(() => {
+    setCheckoutModalOpen(false);
+  }, []);
+
+  const handleClosePreviewModal = useCallback(() => {
+    setActiveSheet(null);
+  }, []);
+
+  const handleClosePolicyModal = useCallback(() => {
+    setActivePolicy(null);
+  }, []);
+
+  const handleCloseToast = useCallback(() => {
+    setToastMessage(null);
+  }, []);
+
   const faqItems = getFaqItems(
     countdown.isFounding,
     countdown.endDateText,
@@ -316,13 +332,13 @@ export const App: React.FC = () => {
 
       <PreviewModal
         sheet={activeSheet}
-        onClose={() => setActiveSheet(null)}
+        onClose={handleClosePreviewModal}
         onScrollToPricing={handleScrollToPricing}
       />
 
       <CheckoutModal
         isOpen={checkoutModalOpen}
-        onClose={() => setCheckoutModalOpen(false)}
+        onClose={handleCloseCheckoutModal}
         pack={selectedPack}
         displayPrice={checkoutDisplayPrice}
         allowsCards={allowsCards}
@@ -330,12 +346,12 @@ export const App: React.FC = () => {
 
       <PolicyModal
         type={activePolicy}
-        onClose={() => setActivePolicy(null)}
+        onClose={handleClosePolicyModal}
       />
 
       <Toast
         message={toastMessage}
-        onClose={() => setToastMessage(null)}
+        onClose={handleCloseToast}
       />
     </div>
   );

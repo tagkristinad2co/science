@@ -6,13 +6,16 @@ interface ToastProps {
 }
 
 export const Toast: React.FC<ToastProps> = ({ message, onClose }) => {
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!message) return;
     const timer = setTimeout(() => {
-      onClose();
+      onCloseRef.current();
     }, 5000);
     return () => clearTimeout(timer);
-  }, [message, onClose]);
+  }, [message]);
 
   if (!message) return null;
 

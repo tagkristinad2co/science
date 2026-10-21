@@ -22,28 +22,36 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
+  // 1. Focus effect: runs ONLY once when the modal opens
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
       setError(null);
-      setTimeout(() => nameInputRef.current?.focus(), 50);
-
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape' && !loading) {
-          onClose();
-        }
-      };
-
-      window.addEventListener('keydown', handleKeyDown);
-      return () => {
-        document.body.style.overflow = '';
-        window.removeEventListener('keydown', handleKeyDown);
-      };
-    } else {
-      document.body.style.overflow = '';
+      const timer = setTimeout(() => nameInputRef.current?.focus(), 50);
+      return () => clearTimeout(timer);
     }
-  }, [isOpen, loading, onClose]);
+  }, [isOpen]);
+
+  // 2. Escape key and body scroll lock: independent of onClose reference
+  useEffect(() => {
+    if (!isOpen) return;
+
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !loading) {
+        onCloseRef.current();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, loading]);
 
   if (!isOpen) return null;
 
