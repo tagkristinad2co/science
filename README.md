@@ -3,12 +3,11 @@
 A modern, responsive React application showcasing the **Science Made Visual** 100-sheet illustrated study collection covering Biology, Chemistry, Physics, and Earth Science (with optional +RM10 upgrade to 200 sheets).
 
 ## Features Ported
-- **Direct-Response Sales Experience**: Full landing page layout with hero visual stack, benefits, topic overviews, Founder's Edition pricing card, and collapsible FAQ.
-- **Interactive Lightbox Modal**: High-resolution watermarked previews of genuine study sheets with keyboard (ESC) and backdrop dismiss.
-- **Free Sample Flow**: Dedicated 5-sheet sample page with email capture form, marketing opt-in consent, demo mode indicators, and direct PDF download.
+- **Direct-Response Sales Experience**: Mobile-first single-column direct-response layout with hero 3D mockup stack, pain points, topic overviews, Founder's Edition pricing card with upgrade upsell, and collapsible FAQ.
+- **Interactive Lightbox Modal**: High-resolution watermarked previews of 10 genuine study sheets with keyboard (ESC) and backdrop dismiss.
 - **Responsive Navigation & Mobile Sticky Bar**: Sticky header navigation, smooth section scrolling, and mobile sticky checkout bar.
 - **Policy & Contact Modals**: Integrated accessible modals for Terms of Service, Privacy Policy, Refund Policy, and Support.
-- **Configurable Integrations**: Easy runtime configuration (`public/config.js` and `src/config.ts`) for checkout link, email lead webhook, policies, and pricing.
+- **Configurable Integrations**: Easy runtime configuration (`public/config.js` and `src/config.ts`) for checkout links, policies, and pricing.
 
 ## Getting Started
 

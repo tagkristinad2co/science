@@ -1,37 +1,94 @@
 import React, { useState, useEffect } from 'react';
-import { defaultConfig, isSecureUrl, isValidEmail, SMVConfig } from './config';
-import { SheetPreview } from './data/content';
+import { config, isSecureUrl } from './config';
+import { SheetPreview, getFaqItems } from './data/content';
+import { useFoundingTimer } from './hooks/useFoundingTimer';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
-import { Benefits } from './components/Benefits';
-import { Gallery } from './components/Gallery';
-import { Band } from './components/Band';
-import { Topics } from './components/Topics';
+import { SoundFamiliar } from './components/SoundFamiliar';
+import { WhatInside } from './components/WhatInside';
+import { WhyItWorks } from './components/WhyItWorks';
+import { WhoItIsFor } from './components/WhoItIsFor';
 import { Pricing } from './components/Pricing';
+import { HowItWorks } from './components/HowItWorks';
+import { Reviews } from './components/Reviews';
+import { RefundPromise } from './components/RefundPromise';
 import { FAQ } from './components/FAQ';
+import { FinalCTA } from './components/FinalCTA';
 import { Footer } from './components/Footer';
 import { StickyBar } from './components/StickyBar';
 import { PreviewModal } from './components/PreviewModal';
 import { PolicyModal, PolicyType } from './components/PolicyModal';
-import { FreeSamplePage } from './components/FreeSamplePage';
+import { CheckoutModal } from './components/CheckoutModal';
+import { ThankYouPage } from './components/ThankYouPage';
 import { Toast } from './components/Toast';
 
 export const App: React.FC = () => {
-  const [config] = useState<SMVConfig>(defaultConfig);
-  const [currentView, setCurrentView] = useState<'home' | 'sample'>('home');
+  const countdown = useFoundingTimer();
   const [activeSheet, setActiveSheet] = useState<SheetPreview | null>(null);
   const [activePolicy, setActivePolicy] = useState<PolicyType>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Sync hash routing with window location
+  // Dynamic payment methods from server
+  const [allowsCards, setAllowsCards] = useState(false);
+
   useEffect(() => {
+    fetch('/api/payment-methods')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d && typeof d.allowsCards === 'boolean') {
+          setAllowsCards(d.allowsCards);
+        }
+      })
+      .catch((err) => console.warn('[App] Could not load payment methods:', err));
+  }, []);
+
+  // View state: main sales page or /thank-you confirmation
+  const [isThankYouView, setIsThankYouView] = useState(() => {
+    return (
+      window.location.pathname.startsWith('/thank-you') ||
+      window.location.hash.startsWith('#thank-you')
+    );
+  });
+
+  // toyyibPay checkout modal state
+  const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
+  const [selectedPack, setSelectedPack] = useState<'100' | '200'>('100');
+  const [checkoutDisplayPrice, setCheckoutDisplayPrice] = useState<string>('');
+
+  // Dynamic pricing based on founding state
+  const currentTier = countdown.isFounding ? config.founding : config.official;
+  const price100 = currentTier.price100;
+  const price200 = currentTier.price200;
+  const upgrade = currentTier.upgrade;
+  const futurePrice100 = config.official.price100;
+  const futurePrice200 = config.official.price200;
+
+  const perSheet100 = countdown.isFounding
+    ? 'about RM0.40 per sheet'
+    : 'about RM0.60 per sheet';
+  const perSheet200 = countdown.isFounding
+    ? 'about RM0.25 per sheet with 200'
+    : 'about RM0.40 per sheet with 200';
+
+  // Handle routing, redirects, and hash changes
+  useEffect(() => {
+    if (window.location.pathname.includes('free-sample')) {
+      window.history.replaceState(null, '', '/');
+    }
+
+    if (window.location.pathname.startsWith('/thank-you')) {
+      setIsThankYouView(true);
+    }
+
     const handleHash = () => {
       const hash = window.location.hash.replace('#', '');
       if (hash === 'free-sample' || hash === 'sample') {
-        setCurrentView('sample');
+        window.history.replaceState(null, '', '/');
         window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (hash === 'thank-you') {
+        setIsThankYouView(true);
       } else if (hash) {
-        setCurrentView('home');
+        setIsThankYouView(false);
         setTimeout(() => {
           const el = document.getElementById(hash);
           if (el) {
@@ -46,61 +103,60 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('hashchange', handleHash);
   }, []);
 
-  // Sync title and meta description for both pages
+  // Sync document title and meta description
   useEffect(() => {
-    if (currentView === 'home') {
-      document.title = 'Science Made Visual | 100 Illustrated Science Study Sheets';
-      const metaDesc = document.querySelector('meta[name="description"]');
-      if (metaDesc) {
-        metaDesc.setAttribute(
-          'content',
-          'Discover 100 colorful illustrated science study sheets covering biology, chemistry, physics and Earth science. Printable PDF. RM39.90 one-time.'
-        );
-      }
-    } else {
-      document.title = 'Free Science Study Sheets | Science Made Visual';
-      const metaDesc = document.querySelector('meta[name="description"]');
-      if (metaDesc) {
-        metaDesc.setAttribute(
-          'content',
-          'Try 5 free genuine illustrated science study sheets. Printable PDF sample from Science Made Visual.'
-        );
-      }
+    if (isThankYouView) {
+      document.title = 'Thank You | Science Made Visual';
+      return;
     }
-  }, [currentView]);
 
-  const handleNavigate = (view: 'home' | 'sample', hash?: string) => {
-    setCurrentView(view);
-    if (view === 'sample') {
-      window.location.hash = 'free-sample';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      if (hash) {
-        window.location.hash = hash;
-        setTimeout(() => {
-          const el = document.getElementById(hash);
-          if (el) {
-            el.scrollIntoView({ behavior: 'smooth' });
-          }
-        }, 100);
-      } else {
-        window.location.hash = '';
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
+    document.title = 'Science Made Visual | 100 Illustrated Science Study Sheets';
+    const metaDesc = document.querySelector('meta[name="description"]');
+    if (metaDesc) {
+      metaDesc.setAttribute(
+        'content',
+        'Discover 100 colourful illustrated science study sheets covering biology, chemistry, physics and Earth science. Printable PDF, instant download.'
+      );
     }
+    const ogDesc = document.querySelector('meta[property="og:description"]');
+    if (ogDesc) {
+      ogDesc.setAttribute(
+        'content',
+        'Discover 100 colourful illustrated science study sheets covering biology, chemistry, physics and Earth science. Printable PDF, instant download.'
+      );
+    }
+  }, [isThankYouView]);
+
+  const handleScrollTo = (hash: string) => {
+    if (isThankYouView) {
+      setIsThankYouView(false);
+      window.history.pushState(null, '', `/#${hash}`);
+    }
+
+    if (!hash) {
+      window.history.replaceState(null, '', '/');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    window.location.hash = hash;
+    setTimeout(() => {
+      const el = document.getElementById(hash);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 100);
+  };
+
+  const handleScrollToPricing = () => {
+    handleScrollTo('pricing');
   };
 
   const handleCheckout = (includeUpgrade: boolean = false) => {
-    const targetUrl = includeUpgrade ? config.bundleCheckoutUrl : config.checkoutUrl;
-    if (isSecureUrl(targetUrl)) {
-      window.location.href = targetUrl;
-    } else {
-      setToastMessage(
-        includeUpgrade
-          ? 'Checkout is not connected yet. Site owner: add the live payment link to bundleCheckoutUrl in config.js.'
-          : 'Checkout is not connected yet. Site owner: add the live payment link to checkoutUrl in config.js.'
-      );
-    }
+    const pack = includeUpgrade ? '200' : '100';
+    const price = includeUpgrade ? price200 : price100;
+    setSelectedPack(pack);
+    setCheckoutDisplayPrice(price);
+    setCheckoutModalOpen(true);
   };
 
   const handleOpenPolicy = (type: PolicyType) => {
@@ -108,34 +164,30 @@ export const App: React.FC = () => {
 
     if (type === 'privacy') {
       if (isSecureUrl(config.privacyUrl)) {
-        window.location.href = config.privacyUrl;
+        window.open(config.privacyUrl, '_blank', 'noopener,noreferrer');
       } else {
-        setToastMessage('This link has not been configured yet. Site owner: update config.js.');
+        setToastMessage('This link has not been configured yet. Site owner: update config.ts.');
       }
       return;
     }
     if (type === 'terms') {
       if (isSecureUrl(config.termsUrl)) {
-        window.location.href = config.termsUrl;
+        window.open(config.termsUrl, '_blank', 'noopener,noreferrer');
       } else {
-        setToastMessage('This link has not been configured yet. Site owner: update config.js.');
+        setToastMessage('This link has not been configured yet. Site owner: update config.ts.');
       }
       return;
     }
     if (type === 'refund') {
       if (isSecureUrl(config.refundUrl)) {
-        window.location.href = config.refundUrl;
+        window.open(config.refundUrl, '_blank', 'noopener,noreferrer');
       } else {
-        setToastMessage('This link has not been configured yet. Site owner: update config.js.');
+        setToastMessage('This link has not been configured yet. Site owner: update config.ts.');
       }
       return;
     }
     if (type === 'contact') {
-      if (isValidEmail(config.supportEmail)) {
-        window.location.href = `mailto:${config.supportEmail}`;
-      } else {
-        setToastMessage('This link has not been configured yet. Site owner: update config.js.');
-      }
+      setActivePolicy('contact');
       return;
     }
 
@@ -152,56 +204,128 @@ export const App: React.FC = () => {
     });
   };
 
+  const handleBackToHomeFromThankYou = () => {
+    window.history.pushState(null, '', '/');
+    setIsThankYouView(false);
+    setTimeout(() => {
+      const el = document.getElementById('pricing');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+
+  const faqItems = getFaqItems(
+    countdown.isFounding,
+    countdown.endDateText,
+    upgrade,
+    price200,
+    allowsCards
+  );
+
   return (
     <div>
+      {/* 1. Top bar & Header */}
       <Navbar
-        currentView={currentView}
-        onNavigate={handleNavigate}
+        onScrollTo={handleScrollTo}
+        countdown={countdown}
+        allowsCards={allowsCards}
       />
 
-      {currentView === 'home' ? (
+      {isThankYouView ? (
+        <ThankYouPage onBackToHome={handleBackToHomeFromThankYou} />
+      ) : (
         <main id="main">
+          {/* 2. Hero with Mockup & Offer box */}
           <Hero
-            onScrollToPricing={() => handleNavigate('home', 'pricing')}
-            onGoToSample={() => handleNavigate('sample')}
+            onScrollToPricing={handleScrollToPricing}
             onPreviewImage={handlePreviewCustomImage}
+            price100={price100}
+            perSheet100={perSheet100}
+            futurePrice100={futurePrice100}
+            countdown={countdown}
+            allowsCards={allowsCards}
           />
-          <Benefits />
-          <Gallery onSelectSheet={setActiveSheet} />
-          <Band onGoToSample={() => handleNavigate('sample')} />
-          <Topics />
+
+          {/* 3. Sound familiar? */}
+          <SoundFamiliar />
+
+          {/* 4. What's inside */}
+          <WhatInside
+            onSelectSheet={setActiveSheet}
+            onScrollToPricing={handleScrollToPricing}
+            price100={price100}
+          />
+
+          {/* 5. Why it works (navy section) */}
+          <WhyItWorks />
+
+          {/* 6. Who it's for */}
+          <WhoItIsFor />
+
+          {/* 7. Pricing / offer */}
           <Pricing
             onCheckout={handleCheckout}
-            basePrice={config.productPrice || 'RM39.90'}
-            bundlePrice={config.bundlePrice || 'RM49.90'}
+            price100={price100}
+            price200={price200}
+            upgrade={upgrade}
+            futurePrice100={futurePrice100}
+            futurePrice200={futurePrice200}
+            perSheet100={perSheet100}
+            perSheet200={perSheet200}
+            countdown={countdown}
+            allowsCards={allowsCards}
           />
-          <FAQ />
+
+          {/* 8. How it works */}
+          <HowItWorks allowsCards={allowsCards} />
+
+          {/* 9. Reviews (hidden when config.testimonials is empty) */}
+          <Reviews testimonials={config.testimonials} />
+
+          {/* 10. Refund promise */}
+          <RefundPromise
+            refundSummary={config.refundSummary}
+            onOpenRefundPolicy={() => handleOpenPolicy('refund')}
+          />
+
+          {/* 11. FAQ */}
+          <FAQ items={faqItems} />
+
+          {/* 12. Final CTA (navy) */}
+          <FinalCTA
+            onScrollToPricing={handleScrollToPricing}
+            price100={price100}
+            countdown={countdown}
+            allowsCards={allowsCards}
+          />
         </main>
-      ) : (
-        <FreeSamplePage
-          config={config}
-          onNavigateHome={(hash) => handleNavigate('home', hash)}
-          onOpenPolicy={handleOpenPolicy}
-          onPreviewImage={handlePreviewCustomImage}
-        />
       )}
 
+      {/* 13. Footer */}
       <Footer
-        currentView={currentView}
-        onNavigate={handleNavigate}
+        onScrollTo={handleScrollTo}
         onOpenPolicy={handleOpenPolicy}
       />
 
-      {currentView === 'home' && (
+      {/* 14. Mobile sticky bar (below 600px) */}
+      {!isThankYouView && (
         <StickyBar
-          onScrollToPricing={() => handleNavigate('home', 'pricing')}
-          price={config.productPrice || 'RM39.90'}
+          onScrollToPricing={handleScrollToPricing}
+          price100={price100}
         />
       )}
 
       <PreviewModal
         sheet={activeSheet}
         onClose={() => setActiveSheet(null)}
+        onScrollToPricing={handleScrollToPricing}
+      />
+
+      <CheckoutModal
+        isOpen={checkoutModalOpen}
+        onClose={() => setCheckoutModalOpen(false)}
+        pack={selectedPack}
+        displayPrice={checkoutDisplayPrice}
+        allowsCards={allowsCards}
       />
 
       <PolicyModal

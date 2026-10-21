@@ -1,33 +1,35 @@
+import { PRICING_CONFIG, PricingTier, FOUNDING_ENDS_AT } from '../shared/pricing';
+
+export type { PricingTier };
+
+export interface Testimonial {
+  name: string;
+  text: string;
+  photo?: string;
+}
+
 export interface SMVConfig {
-  checkoutUrl: string;
-  bundleCheckoutUrl: string;
-  productPrice: string;
-  upgradePrice: string;
-  bundlePrice: string;
-  emailFormEndpoint: string;
+  foundingEndsAt: string;
+  founding: PricingTier;
+  official: PricingTier;
   supportEmail: string;
   privacyUrl: string;
   termsUrl: string;
   refundUrl: string;
+  refundSummary: string;
+  testimonials: Testimonial[];
 }
 
-declare global {
-  interface Window {
-    SMV_CONFIG?: Partial<SMVConfig>;
-  }
-}
-
-export const defaultConfig: SMVConfig = {
-  checkoutUrl: (window as unknown as { SMV_CONFIG?: Partial<SMVConfig> }).SMV_CONFIG?.checkoutUrl || 'https://buy.stripe.com/9B6dR98Ni05C3rz4l2f7i00',
-  bundleCheckoutUrl: (window as unknown as { SMV_CONFIG?: Partial<SMVConfig> }).SMV_CONFIG?.bundleCheckoutUrl || 'https://buy.stripe.com/8x24gze7CdWs7HPaJqf7i01',
-  productPrice: (window as unknown as { SMV_CONFIG?: Partial<SMVConfig> }).SMV_CONFIG?.productPrice || 'RM39.90',
-  upgradePrice: (window as unknown as { SMV_CONFIG?: Partial<SMVConfig> }).SMV_CONFIG?.upgradePrice || 'RM10',
-  bundlePrice: (window as unknown as { SMV_CONFIG?: Partial<SMVConfig> }).SMV_CONFIG?.bundlePrice || 'RM49.90',
-  emailFormEndpoint: (window as unknown as { SMV_CONFIG?: Partial<SMVConfig> }).SMV_CONFIG?.emailFormEndpoint || '',
-  supportEmail: (window as unknown as { SMV_CONFIG?: Partial<SMVConfig> }).SMV_CONFIG?.supportEmail || '',
-  privacyUrl: (window as unknown as { SMV_CONFIG?: Partial<SMVConfig> }).SMV_CONFIG?.privacyUrl || '',
-  termsUrl: (window as unknown as { SMV_CONFIG?: Partial<SMVConfig> }).SMV_CONFIG?.termsUrl || '',
-  refundUrl: (window as unknown as { SMV_CONFIG?: Partial<SMVConfig> }).SMV_CONFIG?.refundUrl || '',
+export const config: SMVConfig = {
+  foundingEndsAt: FOUNDING_ENDS_AT,
+  founding: PRICING_CONFIG.founding,
+  official: PRICING_CONFIG.official,
+  supportEmail: "", // Leave empty for owner to fill in
+  privacyUrl: "",
+  termsUrl: "",
+  refundUrl: "",
+  refundSummary: "If a file is faulty or won't open, contact us and we'll fix it or refund you.",
+  testimonials: [] as Testimonial[],
 };
 
 export const isSecureUrl = (url?: string): boolean => {
@@ -36,4 +38,32 @@ export const isSecureUrl = (url?: string): boolean => {
 
 export const isValidEmail = (email?: string): boolean => {
   return typeof email === 'string' && /^\S+@\S+\.\S+$/.test(email.trim());
+};
+
+export const isValidMalaysianPhone = (phone?: string): boolean => {
+  if (!phone) return false;
+  const cleaned = phone.replace(/[\s\-()]/g, '');
+  return /^(\+?60|0)[1-9][0-9]{7,9}$/.test(cleaned);
+};
+
+export const getLaunchEndText = (isoString: string): string => {
+  try {
+    const d = new Date(isoString);
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const utcTime = d.getTime() + d.getTimezoneOffset() * 60000;
+    const myTime = new Date(utcTime + 8 * 3600000);
+    const dayName = dayNames[myTime.getDay()];
+    const dateNum = myTime.getDate();
+    const monthName = monthNames[myTime.getMonth()];
+    const year = myTime.getFullYear();
+    let hours = myTime.getHours();
+    const minutes = myTime.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'pm' : 'am';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `Ends ${dayName}, ${dateNum} ${monthName} ${year}, ${hours}:${minutes} ${ampm} MYT`;
+  } catch {
+    return 'Ends Wed, 28 Oct 2026, 11:59 pm MYT';
+  }
 };

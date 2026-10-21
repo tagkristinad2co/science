@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { config } from '../config';
 
 export type PolicyType = 'privacy' | 'terms' | 'refund' | 'contact' | null;
 
@@ -28,8 +29,8 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({ type, onClose }) => {
           <p>
             At <strong>Science Made Visual</strong>, your privacy is paramount.
             We do not sell, rent, or trade your personal information. When you
-            request free samples or join our community, your email address is
-            used strictly to send the study material and optional educational updates you requested.
+            reach out for support or make a purchase, your contact information is
+            used strictly to assist you and process your order.
           </p>
           <p>
             You may unsubscribe from email updates at any time with a single click.
@@ -63,8 +64,8 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({ type, onClose }) => {
         <>
           <p>
             We take pride in the quality and clarity of our illustrated science sheets.
-            Because this is an instantly downloadable digital product with comprehensive
-            free samples available before purchase, please review the free 5-sheet sample
+            Because this is an instantly downloadable digital product with genuine
+            previews available on the site, please review the preview pages
             to confirm it fits your learner's level before purchasing.
           </p>
           <p>
@@ -81,15 +82,21 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({ type, onClose }) => {
           <p>
             Have a question about the collection or need help with your digital download?
           </p>
-          <p>
-            You can reach our team at:{' '}
-            <a
-              href="mailto:support@sciencemadevisual.com"
-              style={{ color: 'var(--purple)', fontWeight: 700, textDecoration: 'underline' }}
-            >
-              support@sciencemadevisual.com
-            </a>
-          </p>
+          {config.supportEmail ? (
+            <p>
+              You can reach our team at:{' '}
+              <a
+                href={`mailto:${config.supportEmail}`}
+                style={{ color: 'var(--purple)', fontWeight: 700, textDecoration: 'underline' }}
+              >
+                {config.supportEmail}
+              </a>
+            </p>
+          ) : (
+            <p style={{ fontStyle: 'italic', color: '#65728d' }}>
+              Contact details coming soon.
+            </p>
+          )}
           <p>
             We typically respond to learner and parent inquiries within 24–48 hours on business days.
           </p>

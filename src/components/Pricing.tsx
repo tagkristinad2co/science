@@ -1,35 +1,80 @@
 import React, { useState } from 'react';
+import { CountdownState } from '../hooks/useFoundingTimer';
 
 interface PricingProps {
   onCheckout: (includeUpgrade: boolean) => void;
-  basePrice?: string;
-  bundlePrice?: string;
+  price100: string;
+  price200: string;
+  upgrade: string;
+  futurePrice100: string;
+  futurePrice200: string;
+  perSheet100: string;
+  perSheet200: string;
+  countdown: CountdownState;
+  allowsCards?: boolean;
 }
 
 export const Pricing: React.FC<PricingProps> = ({
   onCheckout,
-  basePrice = 'RM39.90',
-  bundlePrice = 'RM49.90',
+  price100,
+  price200,
+  upgrade,
+  futurePrice100,
+  futurePrice200,
+  perSheet100,
+  perSheet200,
+  countdown,
+  allowsCards = false,
 }) => {
   const [includeUpgrade, setIncludeUpgrade] = useState(false);
 
-  const displayPrice = includeUpgrade ? bundlePrice : basePrice;
+  const displayPrice = includeUpgrade ? price200 : price100;
+  const futurePrice = includeUpgrade ? futurePrice200 : futurePrice100;
+  const perSheet = includeUpgrade ? perSheet200 : perSheet100;
+
+  const checklist = [
+    '100 original illustrated science PDF sheets',
+    'Biology, chemistry, physics & Earth science',
+    'Printable and screen-friendly',
+    'Instant download after payment',
+    'One-time payment, no subscription',
+  ];
 
   return (
-    <section className="section alt" id="pricing">
-      <div className="shell">
-        <div className="center">
-          <div className="mini-title">The Founder's Edition</div>
-          <h2>Make science revision more visual.</h2>
-          <p className="section-intro">
-            Get the 100-sheet edition available today. No subscription, no hidden
-            monthly charges.
-          </p>
-        </div>
+    <section className="section" id="pricing">
+      <div className="ebook-shell center">
+        <h2>Choose your pack</h2>
+
         <div className="pricebox">
-          <div className="eyebrow">100-sheet digital collection</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+            <span className="eyebrow" style={{ padding: '6px 12px' }}>
+              100-sheet digital collection
+            </span>
+            {countdown.isFounding && (
+              <span className="pill-lime">FOUNDING PRICE</span>
+            )}
+          </div>
+
+          {countdown.isFounding && (
+            <div
+              style={{
+                background: '#f4f0ff',
+                borderRadius: '10px',
+                padding: '8px 12px',
+                fontSize: '13px',
+                color: 'var(--navy)',
+                fontWeight: 700,
+                margin: '10px auto 14px',
+                maxWidth: '400px',
+              }}
+            >
+              ⏳ Founding price ends in {countdown.formattedTime}
+            </div>
+          )}
+
           <div className="price">{displayPrice}</div>
-          {includeUpgrade ? (
+
+          {includeUpgrade && (
             <div
               style={{
                 fontSize: '13px',
@@ -38,29 +83,35 @@ export const Pricing: React.FC<PricingProps> = ({
                 marginBottom: '4px',
               }}
             >
-              100 sheets RM39.90 + 100 more sheets RM10
+              100 sheets {price100} + 100 more sheets {upgrade}
             </div>
-          ) : null}
-          <p className="oldnote">One-time payment · Personal / household study</p>
+          )}
+
+          {countdown.isFounding && (
+            <div style={{ fontSize: '13px', color: '#7a8599', marginBottom: '6px' }}>
+              Price goes up to {futurePrice} after launch
+            </div>
+          )}
+
+          <div style={{ fontSize: '13px', color: 'var(--navy)', fontWeight: 600, marginBottom: '6px' }}>
+            That's {perSheet}.
+          </div>
+
+          <p className="fine" style={{ margin: '0 0 16px', color: '#65728d' }}>
+            One-time payment · Personal / household study
+          </p>
+
           <ul className="includes">
-            <li>100 original illustrated science PDF sheets</li>
-            <li>Biology, chemistry, physics & Earth science topics</li>
-            <li>Printable and screen-friendly files</li>
-            <li>Instant access after successful payment</li>
-            <li>No recurring subscription</li>
+            {checklist.map((item, i) => (
+              <li key={i}>
+                <span className="check">✓</span>
+                <span>{item}</span>
+              </li>
+            ))}
           </ul>
 
-          <div
-            style={{
-              background: '#f4f0ff',
-              border: '1px solid #dcd3f8',
-              borderRadius: '14px',
-              padding: '16px 20px',
-              textAlign: 'left',
-              maxWidth: '450px',
-              margin: '0 auto 24px',
-            }}
-          >
+          {/* Upsell Add-on Box */}
+          <div className="upsell-box">
             <label
               style={{
                 display: 'flex',
@@ -85,7 +136,7 @@ export const Pricing: React.FC<PricingProps> = ({
               />
               <div>
                 <span style={{ fontWeight: 800, color: 'var(--navy)', fontSize: '14px' }}>
-                  Add 100 more sheets (200 total) — +RM10
+                  Add 100 more sheets (200 total): +{upgrade}
                 </span>
                 <p
                   style={{
@@ -95,7 +146,9 @@ export const Pricing: React.FC<PricingProps> = ({
                     lineHeight: 1.5,
                   }}
                 >
-                  Double your collection for just RM10 more.
+                  {countdown.isFounding
+                    ? 'Founding price, then +RM20 after launch.'
+                    : 'Double your collection.'}
                 </p>
               </div>
             </label>
@@ -103,17 +156,18 @@ export const Pricing: React.FC<PricingProps> = ({
 
           <button
             type="button"
-            className="btn"
+            className="btn-lime"
             onClick={() => onCheckout(includeUpgrade)}
-            style={{ width: '100%', maxWidth: '450px' }}
+            style={{ width: '100%', maxWidth: '460px' }}
           >
             {includeUpgrade
-              ? `Get all 200 sheets — ${bundlePrice} →`
-              : `Get my 100 sheets — ${basePrice} →`}
+              ? `GET ALL 200 SHEETS — ${price200} →`
+              : `GET MY 100 SHEETS — ${price100} →`}
           </button>
-          <p className="fine" style={{ margin: '15px 0 0' }}>
-            Digital files only. Nothing will be shipped.
-          </p>
+
+          <div style={{ fontSize: '12px', color: '#65728d', marginTop: '16px' }}>
+            🔒 Secure checkout by toyyibPay · {allowsCards ? 'FPX online banking & cards accepted' : 'FPX online banking accepted'}
+          </div>
         </div>
       </div>
     </section>

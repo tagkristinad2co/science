@@ -1,3 +1,5 @@
+import { config } from '../config';
+
 export interface SheetPreview {
   id: string;
   image: string;
@@ -79,88 +81,61 @@ export const GALLERY_SHEETS: SheetPreview[] = [
   },
 ];
 
-export interface Feature {
-  emoji: string;
-  title: string;
-  description: string;
-}
-
-export const BENEFIT_FEATURES: Feature[] = [
-  {
-    emoji: '🧠',
-    title: 'Visual explanations',
-    description: 'Illustrated diagrams and key facts help explain how science concepts fit together.',
-  },
-  {
-    emoji: '📚',
-    title: 'Topic-by-topic',
-    description: 'Dip into individual reference sheets whenever you want to revisit a concept.',
-  },
-  {
-    emoji: '🖨️',
-    title: 'Printable PDFs',
-    description: 'Use the collection on-screen or print pages for personal home study.',
-  },
-  {
-    emoji: '🌍',
-    title: 'Four science areas',
-    description: 'Explore biology, chemistry, physics and Earth science in one collection.',
-  },
-];
-
-export const TOPIC_AREAS: Feature[] = [
-  {
-    emoji: '🧬',
-    title: 'Biology',
-    description: 'Human heart, cells, enzymes, respiration and more.',
-  },
-  {
-    emoji: '⚗️',
-    title: 'Chemistry',
-    description: 'Acids and bases, periodic table, bonding and reactions.',
-  },
-  {
-    emoji: '⚡',
-    title: 'Physics',
-    description: 'Electricity, magnetism, light and sound.',
-  },
-  {
-    emoji: '🌋',
-    title: 'Earth science',
-    description: 'Fossils, the rock cycle, climate and Earth systems.',
-  },
-];
-
 export interface FAQItem {
   question: string;
   answer: string;
 }
 
-export const FAQ_ITEMS: FAQItem[] = [
-  {
-    question: 'Is this a physical book?',
-    answer: 'No. You receive digital PDF study sheets you can download and view or print for personal learning.',
-  },
-  {
-    question: 'What age is the collection for?',
-    answer: 'The difficulty varies by topic. It is broadly relevant to older primary and lower-secondary learners; please inspect the free sample to decide if it suits your learner.',
-  },
-  {
-    question: "Does it follow my country's school curriculum?",
-    answer: 'It is a supplemental reference collection. We do not claim formal alignment with any particular national curriculum or exam board.',
-  },
-  {
-    question: 'How many sheets are included?',
-    answer:
-      'The standard pack has 100 original illustrated science sheets for RM39.90. Tick the add-on at checkout to get another 100 sheets (200 in total) for just RM10 more.',
-  },
-  {
-    question: 'Can I share it with my class?',
-    answer:
-      'The pack is for personal/household study only. Classroom redistribution and resale are not included.',
-  },
-  {
-    question: 'How do I get access?',
-    answer: 'After successful payment, your configured checkout provider will supply digital delivery instructions.',
-  },
-];
+export const getFaqItems = (
+  isFounding: boolean,
+  endDateText: string,
+  upgrade: string,
+  bundlePrice: string,
+  allowsCards: boolean = false
+): FAQItem[] => {
+  const items: FAQItem[] = [];
+
+  if (isFounding) {
+    items.push({
+      question: 'What is the founding price?',
+      answer: `It's our launch price for the first 7 days, until ${endDateText}. After that, the price goes up to ${config.official.price100} for 100 sheets and ${config.official.price200} for 200 sheets.`,
+    });
+  }
+
+  items.push(
+    {
+      question: 'Is this a physical book?',
+      answer: 'No. You get digital PDF sheets to download, view or print at home.',
+    },
+    {
+      question: 'How do I receive the sheets?',
+      answer:
+        "Right after payment you'll see your download link on the thank-you page, and it's also sent to your email. Save the link so you can download again.",
+    },
+    {
+      question: 'Which payment methods can I use?',
+      answer: allowsCards
+        ? "FPX online banking and debit/credit cards, through toyyibPay's secure checkout."
+        : "FPX online banking, through toyyibPay's secure checkout.",
+    },
+    {
+      question: 'What age is it for?',
+      answer:
+        'It broadly suits upper primary and lower secondary learners. Difficulty varies by topic, so have a look at the preview pages to check the level.',
+    },
+    {
+      question: 'Does it follow the KSSR / KSSM syllabus?',
+      answer: "It's a supplementary visual reference, not an official syllabus resource. Many topics overlap with school science, but we don't claim formal alignment.",
+    },
+    {
+      question: `What's the ${upgrade} add-on?`,
+      answer: `Tick it at checkout to get another 100 different sheets, 200 in total, for ${bundlePrice}.`,
+    },
+    {
+      question: 'Can I share it with my class?',
+      answer: "The pack is for personal/household use only. Classroom sharing and resale aren't included.",
+    }
+  );
+
+  return items;
+};

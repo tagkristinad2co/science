@@ -2,12 +2,13 @@ import React from 'react';
 import { PolicyType } from './PolicyModal';
 
 interface FooterProps {
-  currentView: 'home' | 'sample';
-  onNavigate: (view: 'home' | 'sample', hash?: string) => void;
+  onScrollTo: (hash: string) => void;
   onOpenPolicy: (type: PolicyType) => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ currentView, onNavigate, onOpenPolicy }) => {
+export const Footer: React.FC<FooterProps> = ({ onScrollTo, onOpenPolicy }) => {
+  const currentYear = new Date().getFullYear();
+
   return (
     <footer className="footer">
       <div className="shell footer-inner">
@@ -15,7 +16,7 @@ export const Footer: React.FC<FooterProps> = ({ currentView, onNavigate, onOpenP
           <button
             type="button"
             className="brand"
-            onClick={() => onNavigate('home')}
+            onClick={() => onScrollTo('')}
             style={{ cursor: 'pointer' }}
           >
             <span className="brand-symbol">✦</span>
@@ -23,38 +24,23 @@ export const Footer: React.FC<FooterProps> = ({ currentView, onNavigate, onOpenP
               SCIENCE<br />MADE VISUAL
             </span>
           </button>
-          <p className="fine" style={{ maxWidth: '400px', color: '#b9c4d8', marginTop: '15px' }}>
-            Illustrated learning resources for science explorers worldwide. Digital
-            supplement, not a replacement for school instruction.
+          <p className="fine" style={{ maxWidth: '400px', color: '#b9c4d8', marginTop: '14px' }}>
+            Illustrated learning resources for science explorers. Digital supplement,
+            not a replacement for school instruction.
           </p>
+          <div style={{ fontSize: '12px', color: '#8896ab', marginTop: '10px' }}>
+            © {currentYear} Science Made Visual
+          </div>
         </div>
+
         <div className="footer-nav">
-          {currentView === 'home' ? (
-            <>
-              <button
-                type="button"
-                className="footer-link-btn"
-                onClick={() => onNavigate('sample')}
-              >
-                Free sample
-              </button>
-              <button
-                type="button"
-                className="footer-link-btn"
-                onClick={() => onNavigate('home', 'faq')}
-              >
-                FAQ
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="footer-link-btn"
-              onClick={() => onNavigate('home')}
-            >
-              Home
-            </button>
-          )}
+          <button
+            type="button"
+            className="footer-link-btn"
+            onClick={() => onScrollTo('faq')}
+          >
+            FAQ
+          </button>
           <button
             type="button"
             className="footer-link-btn"

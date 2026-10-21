@@ -1,29 +1,39 @@
 import React from 'react';
+import { CountdownState } from '../hooks/useFoundingTimer';
 
 interface NavbarProps {
-  currentView: 'home' | 'sample';
-  onNavigate: (view: 'home' | 'sample', hash?: string) => void;
+  onScrollTo: (hash: string) => void;
+  countdown: CountdownState;
+  allowsCards?: boolean;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate }) => {
+export const Navbar: React.FC<NavbarProps> = ({ onScrollTo, countdown, allowsCards = false }) => {
   return (
     <>
       <a className="skip" href="#main">
         Skip to content
       </a>
-      <div className="notice">
-        {currentView === 'home' ? (
-          <>✨ Printable digital resource · <b>100 illustrated sheets</b> · Upgrade to 200 for +RM10</>
+
+      {/* 1. Top bar */}
+      <div className="top-bar">
+        {countdown.isFounding ? (
+          <>
+            🚀 Founding price ends in <b>{countdown.formattedTime}</b> · {countdown.endDateText}
+          </>
         ) : (
-          <>🎁 Free printable science resources · <b>5 real sheets</b> from our collection</>
+          <>
+            🇲🇾 Made for Malaysian families · Instant PDF download · Pay with{' '}
+            {allowsCards ? 'FPX or card' : 'FPX online banking'}
+          </>
         )}
       </div>
+
       <header>
-        <nav className="nav shell" aria-label="Main navigation">
+        <div className="shell nav" aria-label="Main navigation">
           <button
             type="button"
             className="brand"
-            onClick={() => onNavigate('home')}
+            onClick={() => onScrollTo('')}
             style={{ cursor: 'pointer' }}
           >
             <span className="brand-symbol">✦</span>
@@ -32,71 +42,30 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate }) => {
             </span>
           </button>
           <div className="navlinks">
-            {currentView === 'home' ? (
-              <>
-                <button
-                  type="button"
-                  className="nav-link-btn"
-                  onClick={() => onNavigate('home', 'inside')}
-                >
-                  What's inside
-                </button>
-                <button
-                  type="button"
-                  className="nav-link-btn"
-                  onClick={() => onNavigate('home', 'benefits')}
-                >
-                  Why it works
-                </button>
-                <button
-                  type="button"
-                  className="nav-link-btn"
-                  onClick={() => onNavigate('home', 'faq')}
-                >
-                  FAQ
-                </button>
-                <button
-                  type="button"
-                  className="nav-link-btn"
-                  onClick={() => onNavigate('sample')}
-                >
-                  Free sample
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => onNavigate('home', 'pricing')}
-                >
-                  Get the pack →
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="nav-link-btn"
-                  onClick={() => onNavigate('home')}
-                >
-                  Home
-                </button>
-                <button
-                  type="button"
-                  className="nav-link-btn"
-                  onClick={() => onNavigate('home', 'inside')}
-                >
-                  Preview 100-sheet pack
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => onNavigate('home', 'pricing')}
-                >
-                  Shop the collection →
-                </button>
-              </>
-            )}
+            <button
+              type="button"
+              className="nav-link-btn"
+              onClick={() => onScrollTo('inside')}
+            >
+              What's inside
+            </button>
+            <button
+              type="button"
+              className="nav-link-btn"
+              onClick={() => onScrollTo('faq')}
+            >
+              FAQ
+            </button>
+            <button
+              type="button"
+              className="btn"
+              style={{ minHeight: '44px', padding: '10px 18px', fontSize: '13px' }}
+              onClick={() => onScrollTo('pricing')}
+            >
+              Get the sheets →
+            </button>
           </div>
-        </nav>
+        </div>
       </header>
     </>
   );

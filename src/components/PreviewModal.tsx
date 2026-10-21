@@ -4,9 +4,14 @@ import { SheetPreview } from '../data/content';
 interface PreviewModalProps {
   sheet: SheetPreview | null;
   onClose: () => void;
+  onScrollToPricing: () => void;
 }
 
-export const PreviewModal: React.FC<PreviewModalProps> = ({ sheet, onClose }) => {
+export const PreviewModal: React.FC<PreviewModalProps> = ({
+  sheet,
+  onClose,
+  onScrollToPricing,
+}) => {
   const closeBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -32,6 +37,12 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ sheet, onClose }) =>
 
   if (!sheet) return null;
 
+  const handlePricingClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onClose();
+    onScrollToPricing();
+  };
+
   return (
     <div
       className="modal open"
@@ -53,22 +64,65 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ sheet, onClose }) =>
       >
         ×
       </button>
-      <div style={{ textAlign: 'center', maxWidth: 'min(90vw, 850px)' }}>
-        <img
-          src={sheet.image}
-          alt={sheet.alt}
-          style={{ width: '100%', height: 'auto', display: 'block' }}
-        />
+
+      <div style={{ textAlign: 'center', width: '100%', maxWidth: '800px' }}>
+        <div
+          className="lightbox-card"
+          style={{ margin: '0 auto', position: 'relative' }}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {/* Watermark overlay across the entire sheet */}
+          <div
+            className="watermark-overlay"
+            aria-hidden="true"
+            onContextMenu={(e) => e.preventDefault()}
+          />
+
+          {/* Protected image */}
+          <img
+            src={sheet.image}
+            alt={sheet.alt}
+            draggable={false}
+            style={{
+              width: '100%',
+              height: 'auto',
+              maxHeight: '82vh',
+              objectFit: 'contain',
+              display: 'block',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
+            onContextMenu={(e) => e.preventDefault()}
+          />
+
+          {/* Bottom 50% Heavy Blur & Centred Call to Action */}
+          <div
+            className="lightbox-blur-overlay"
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            <div className="lightbox-label">
+              🔒 Full sheet included in the pack
+            </div>
+            <button
+              type="button"
+              className="btn-lime-sm"
+              onClick={handlePricingClick}
+            >
+              See pricing →
+            </button>
+          </div>
+        </div>
+
         <div
           style={{
             color: '#fff',
             marginTop: '12px',
             fontSize: '14px',
             fontWeight: 600,
-            textShadow: '0 2px 6px rgba(0,0,0,0.6)',
+            textShadow: '0 2px 6px rgba(0,0,0,0.7)',
           }}
         >
-          {sheet.title} ({sheet.category}) — <span style={{ opacity: 0.85 }}>Watermarked online preview</span>
+          {sheet.title} ({sheet.category}) — <span style={{ opacity: 0.85 }}>Watermarked preview</span>
         </div>
       </div>
     </div>
