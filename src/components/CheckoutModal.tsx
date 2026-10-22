@@ -269,6 +269,45 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           <div
             style={{
               textAlign: 'center',
+              fontSize: '11px',
+              color: '#65728d',
+              marginTop: '10px',
+              lineHeight: 1.5,
+            }}
+          >
+            By paying, you agree to our{' '}
+            <a
+              href="/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: 'var(--purple)', fontWeight: 600, textDecoration: 'underline' }}
+            >
+              Terms & Conditions
+            </a>
+            ,{' '}
+            <a
+              href="/booking-policy"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: 'var(--purple)', fontWeight: 600, textDecoration: 'underline' }}
+            >
+              Booking Policy
+            </a>{' '}
+            and{' '}
+            <a
+              href="/payment-policy"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: 'var(--purple)', fontWeight: 600, textDecoration: 'underline' }}
+            >
+              Payment Policy
+            </a>
+            .
+          </div>
+
+          <div
+            style={{
+              textAlign: 'center',
               fontSize: '12px',
               color: '#65728d',
               marginTop: '16px',

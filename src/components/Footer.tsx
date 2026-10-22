@@ -1,22 +1,32 @@
 import React from 'react';
 import { PolicyType } from './PolicyModal';
+import { BusinessDetailsLine } from './PolicyValue';
 
 interface FooterProps {
   onScrollTo: (hash: string) => void;
   onOpenPolicy: (type: PolicyType) => void;
+  onNavigate?: (path: string) => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onScrollTo, onOpenPolicy }) => {
+export const Footer: React.FC<FooterProps> = ({ onScrollTo, onOpenPolicy, onNavigate }) => {
   const currentYear = new Date().getFullYear();
+
+  const handlePageNavigate = (path: string) => {
+    if (onNavigate) {
+      onNavigate(path);
+    } else {
+      window.location.href = path;
+    }
+  };
 
   return (
     <footer className="footer">
-      <div className="shell footer-inner">
+      <div className="shell footer-inner" style={{ alignItems: 'flex-start' }}>
         <div>
           <button
             type="button"
             className="brand"
-            onClick={() => onScrollTo('')}
+            onClick={() => (onNavigate ? onNavigate('/') : onScrollTo(''))}
             style={{ cursor: 'pointer' }}
           >
             <span className="brand-symbol">✦</span>
@@ -33,42 +43,67 @@ export const Footer: React.FC<FooterProps> = ({ onScrollTo, onOpenPolicy }) => {
           </div>
         </div>
 
-        <div className="footer-nav">
-          <button
-            type="button"
-            className="footer-link-btn"
-            onClick={() => onScrollTo('faq')}
-          >
-            FAQ
-          </button>
-          <button
-            type="button"
-            className="footer-link-btn"
-            onClick={() => onOpenPolicy('privacy')}
-          >
-            Privacy
-          </button>
-          <button
-            type="button"
-            className="footer-link-btn"
-            onClick={() => onOpenPolicy('terms')}
-          >
-            Terms
-          </button>
-          <button
-            type="button"
-            className="footer-link-btn"
-            onClick={() => onOpenPolicy('refund')}
-          >
-            Refund policy
-          </button>
-          <button
-            type="button"
-            className="footer-link-btn"
-            onClick={() => onOpenPolicy('contact')}
-          >
-            Contact
-          </button>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+          <div className="footer-nav" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              className="footer-link-btn"
+              onClick={() => onScrollTo('faq')}
+            >
+              FAQ
+            </button>
+            <button
+              type="button"
+              className="footer-link-btn"
+              onClick={() => onOpenPolicy('privacy')}
+            >
+              Privacy
+            </button>
+            <button
+              type="button"
+              className="footer-link-btn"
+              onClick={() => handlePageNavigate('/terms')}
+            >
+              Terms & Conditions
+            </button>
+            <button
+              type="button"
+              className="footer-link-btn"
+              onClick={() => handlePageNavigate('/booking-policy')}
+            >
+              Booking Policy
+            </button>
+            <button
+              type="button"
+              className="footer-link-btn"
+              onClick={() => handlePageNavigate('/payment-policy')}
+            >
+              Payment Policy
+            </button>
+            <button
+              type="button"
+              className="footer-link-btn"
+              onClick={() => handlePageNavigate('/security-policy')}
+            >
+              Security Policy
+            </button>
+            <button
+              type="button"
+              className="footer-link-btn"
+              onClick={() => onOpenPolicy('refund')}
+            >
+              Refund policy
+            </button>
+            <button
+              type="button"
+              className="footer-link-btn"
+              onClick={() => onOpenPolicy('contact')}
+            >
+              Contact
+            </button>
+          </div>
+
+          <BusinessDetailsLine style={{ marginTop: '10px', textAlign: 'right' }} />
         </div>
       </div>
     </footer>

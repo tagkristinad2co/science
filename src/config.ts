@@ -8,6 +8,15 @@ export interface Testimonial {
   photo?: string;
 }
 
+export interface BusinessConfig {
+  name: string;
+  registrationNo: string;
+  address: string;
+  email: string;
+  phone: string;
+  responseTime: string;
+}
+
 export interface SMVConfig {
   foundingEndsAt: string;
   founding: PricingTier;
@@ -18,18 +27,29 @@ export interface SMVConfig {
   refundUrl: string;
   refundSummary: string;
   testimonials: Testimonial[];
+  business: BusinessConfig;
+  policiesLastUpdated: string;
 }
 
 export const config: SMVConfig = {
   foundingEndsAt: FOUNDING_ENDS_AT,
   founding: PRICING_CONFIG.founding,
   official: PRICING_CONFIG.official,
-  supportEmail: "", // Leave empty for owner to fill in
+  supportEmail: "support.mathceria@gmail.com",
   privacyUrl: "",
-  termsUrl: "",
+  termsUrl: "/terms",
   refundUrl: "",
   refundSummary: "If a file is faulty or won't open, contact us and we'll fix it or refund you.",
   testimonials: [] as Testimonial[],
+  business: {
+    name: "TRE Marketing Enterprise",
+    registrationNo: "201603074497",
+    address: "NO. 63-2, JALAN EQUINE 10F, TAMAN EQUINE , 43300 SERI KEMBANGAN, SELANGOR.",
+    email: "support.mathceria@gmail.com",
+    phone: "60122798277",
+    responseTime: "2 working days",
+  },
+  policiesLastUpdated: "22 October 2026",
 };
 
 export const isSecureUrl = (url?: string): boolean => {
