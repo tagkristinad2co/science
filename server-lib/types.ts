@@ -20,6 +20,7 @@ export interface Order {
   createdAt: string;
   paidAt?: string;
   emailSentAt?: string;
+  hideFromSocialProof?: boolean;
 
   // Stripe fields
   stripeSessionId?: string;

@@ -74,6 +74,7 @@ export const SecurityPolicyPage: React.FC<SecurityPolicyPageProps> = ({ onNaviga
           and phone number, payment status, Stripe session and payment reference, receipt images you upload and your
           reference number, and the order date. This is stored with our hosting provider, and only our server can access it.
           Receipts are only visible to the business owner. It is not visible to other visitors.
+          If you buy, your first name and the first letter of your second name may appear in a 'recent purchase' notification on our website for up to 14 days (for example, 'Aisyah R. bought the 200-sheet pack'). We never show your full name, email or phone. Email <PolicyValue value={business.email} isEmail /> if you'd like yours hidden.
         </p>
       </section>
 

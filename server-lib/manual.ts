@@ -276,12 +276,13 @@ export async function processAdminAction(
   siteUrl: string,
   body: {
     orderId: string;
-    action: 'approve' | 'reject';
+    action: 'approve' | 'reject' | 'toggle_social_proof';
     reason?: string;
     adminUser?: string;
+    hideFromSocialProof?: boolean;
   }
 ): Promise<{ status: number; body: any }> {
-  const { orderId, action, reason, adminUser } = body;
+  const { orderId, action, reason, adminUser, hideFromSocialProof } = body;
   if (!orderId || !action) {
     return { status: 400, body: { error: 'Missing orderId or action' } };
   }
@@ -291,7 +292,21 @@ export async function processAdminAction(
     return { status: 404, body: { error: 'Order not found' } };
   }
 
-  // Prevent approving FPX orders through manual review flow
+  if (action === 'toggle_social_proof') {
+    const nextVal = typeof hideFromSocialProof === 'boolean'
+      ? hideFromSocialProof
+      : !order.hideFromSocialProof;
+    await store.update(order.orderId, { hideFromSocialProof: nextVal });
+    console.log(
+      `[ADMIN AUDIT] Order ${order.orderId} hideFromSocialProof set to ${nextVal} by ${adminUser || 'admin'}`
+    );
+    return {
+      status: 200,
+      body: { ok: true, hideFromSocialProof: nextVal },
+    };
+  }
+
+  // Prevent approving FPX/Stripe orders through manual review flow
   if (order.method !== 'manual') {
     return { status: 400, body: { error: 'Cannot approve non-manual order from manual review' } };
   }

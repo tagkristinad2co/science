@@ -20,6 +20,7 @@ interface OrderItem {
   rejectReason?: string;
   accessToken?: string;
   receiptUploadedAt?: string;
+  hideFromSocialProof?: boolean;
 }
 
 export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ onNavigate }) => {
@@ -162,6 +163,39 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
     } catch (err) {
       console.error('[Reject error]', err);
       alert('Rejection request failed.');
+    } finally {
+      setProcessingAction(null);
+    }
+  };
+
+  const handleToggleHideSocialProof = async (order: OrderItem) => {
+    setProcessingAction(order.orderId);
+    try {
+      const nextVal = !order.hideFromSocialProof;
+      const res = await fetch('/api/admin/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: order.orderId,
+          action: 'toggle_social_proof',
+          hideFromSocialProof: nextVal,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Failed to update visibility');
+        return;
+      }
+
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.orderId === order.orderId ? { ...o, hideFromSocialProof: nextVal } : o
+        )
+      );
+    } catch (err) {
+      console.error('[Toggle social proof error]', err);
+      alert('Failed to update social proof visibility.');
     } finally {
       setProcessingAction(null);
     }
@@ -477,6 +511,11 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
                             ? '💳 Stripe'
                             : 'toyyibPay (old)'}
                         </span>
+                        {o.status === 'paid' && o.hideFromSocialProof && (
+                          <span style={{ fontSize: '11px', background: '#fee2e2', color: '#b91c1c', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                            Hidden from popup
+                          </span>
+                        )}
                       </div>
 
                       <div style={{ fontSize: '13px', color: '#65728d' }}>
@@ -614,7 +653,37 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
                       )}
                     </div>
 
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      {/* Hide from sales popup toggle for paid orders */}
+                      {o.status === 'paid' && (
+                        <label
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '8px 12px',
+                            background: o.hideFromSocialProof ? '#fff1f2' : '#f8fafc',
+                            border: o.hideFromSocialProof ? '1px solid #fecdd3' : '1px solid #cbd5e1',
+                            borderRadius: '8px',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            color: o.hideFromSocialProof ? '#e11d48' : '#475569',
+                            cursor: 'pointer',
+                            userSelect: 'none',
+                          }}
+                          title="Toggle whether this sale appears in the recent purchases popup on the site"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!!o.hideFromSocialProof}
+                            disabled={processingAction === o.orderId}
+                            onChange={() => handleToggleHideSocialProof(o)}
+                            style={{ cursor: 'pointer', accentColor: '#7855f5' }}
+                          />
+                          <span>{o.hideFromSocialProof ? '🙈 Hidden from sales popup' : 'Hide from sales popup'}</span>
+                        </label>
+                      )}
+
                       {/* Approve / Reject buttons for manual orders */}
                       {o.method === 'manual' && o.status !== 'paid' && (
                         <>

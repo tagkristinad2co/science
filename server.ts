@@ -29,6 +29,7 @@ import {
   verifyAdminSession,
 } from './server-lib/admin-auth.ts';
 import type { OrderStatus } from './server-lib/types.ts';
+import { getRecentSales } from './server-lib/recent-sales.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -81,6 +82,19 @@ app.get('/api/payment-methods', (_req: Request, res: Response) => {
     onlineLabel: 'Card & FPX online banking',
     manualEnabled: true,
   });
+});
+
+// Public endpoint for real recent sales (social proof)
+app.get('/api/recent-sales', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const data = await getRecentSales(devStore);
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.json(data);
+  } catch (err) {
+    console.error('[Recent Sales Error]', err);
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.json({ sales: [], last24hCount: 0 });
+  }
 });
 
 // 1. POST /api/checkout (Stripe Checkout)
@@ -227,6 +241,7 @@ app.post('/api/admin/action', requireAdminAuth, async (req: Request, res: Respon
     orderId: req.body.orderId,
     action: req.body.action,
     reason: req.body.reason,
+    hideFromSocialProof: req.body.hideFromSocialProof,
     adminUser: 'owner',
   });
   res.status(result.status).json(result.body);

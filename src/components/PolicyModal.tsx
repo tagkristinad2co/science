@@ -45,6 +45,9 @@ export const PolicyModal: React.FC<PolicyModalProps> = ({ type, onClose }) => {
             Payment processing is securely handled by independent, PCI-compliant payment gateways.
             We never store or view your credit card details on our servers.
           </p>
+          <p>
+            If you buy, your first name and the first letter of your second name may appear in a 'recent purchase' notification on our website for up to 14 days (for example, 'Aisyah R. bought the 200-sheet pack'). We never show your full name, email or phone. Email {config.business.email} if you'd like yours hidden.
+          </p>
         </>
       ),
     },

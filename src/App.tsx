@@ -21,6 +21,7 @@ import { PolicyModal, PolicyType } from './components/PolicyModal';
 import { CheckoutModal } from './components/CheckoutModal';
 import { ThankYouPage } from './components/ThankYouPage';
 import { Toast } from './components/Toast';
+import { SocialProofPopup } from './components/SocialProofPopup';
 
 // Policy Pages
 import { TermsPage } from './pages/TermsPage';
@@ -477,6 +478,13 @@ export const App: React.FC = () => {
         message={toastMessage}
         onClose={handleCloseToast}
       />
+
+      {/* Social proof popup: only visible on sales page and when modals are closed */}
+      {currentRoute === 'home' && (
+        <SocialProofPopup
+          isBlocked={checkoutModalOpen || activeSheet !== null || activePolicy !== null}
+        />
+      )}
     </div>
   );
 };

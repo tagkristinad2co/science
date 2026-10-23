@@ -30,6 +30,7 @@ export default async (req: Request, _context: Context): Promise<Response> => {
       orderId: body.orderId,
       action: body.action,
       reason: body.reason,
+      hideFromSocialProof: body.hideFromSocialProof,
       adminUser: 'owner',
     });
 
