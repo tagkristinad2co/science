@@ -6,6 +6,7 @@ import { validateCheckoutInput, generateOrderId } from './validation.ts';
 import { getDownloadLink } from './downloads.ts';
 import { sendTelegramAlert, sendOrderApprovedEmail } from './notifications.ts';
 import { sendMetaCapiPurchase } from './meta-capi.ts';
+import { config } from '../src/config.ts';
 
 let stripeClient: Stripe | null = null;
 
@@ -216,7 +217,7 @@ export async function applyStripePaid(
       pack: order.pack,
       downloadUrl,
       orderPageUrl,
-      replyTo: 'support.mathceria@gmail.com',
+      replyTo: config.business?.email || 'support.mathceria@gmail.com',
     });
 
     await store.update(order.orderId, { emailSentAt: now });

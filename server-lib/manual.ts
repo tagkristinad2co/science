@@ -5,8 +5,14 @@ import { validateCheckoutInput, generateOrderId, maskEmail } from './validation.
 import { getDownloadLink } from './downloads.ts';
 import { detectFileType } from './magic-bytes.ts';
 import { constantTimeTokenCompare } from './admin-auth.ts';
-import { sendTelegramAlert, sendOrderApprovedEmail } from './notifications.ts';
+import {
+  sendTelegramAlert,
+  sendOrderApprovedEmail,
+  sendReceiptReceivedEmail,
+  sendOrderRejectedEmail,
+} from './notifications.ts';
 import { sendMetaCapiPurchase } from './meta-capi.ts';
+import { config } from '../src/config.ts';
 
 export async function processManualCreate(
   store: OrderStore,
@@ -196,6 +202,7 @@ export async function processManualReceiptUpload(
   const key = `${order.orderId}_${Date.now()}.${detected.extension}`;
   await receiptStore.save(key, fileBuffer, detected.mime);
 
+  const uploadTime = new Date().toISOString();
   await store.update(order.orderId, {
     status: 'under_review',
     receiptKey: key,
@@ -204,14 +211,36 @@ export async function processManualReceiptUpload(
     duplicateReceipt,
     duplicateOrderId,
     customerReference: customerReference?.trim() || '',
-    receiptUploadedAt: new Date().toISOString(),
+    receiptUploadedAt: uploadTime,
   });
 
   console.log(`[Receipt Uploaded] Order ${order.orderId} moved to under_review. Duplicate: ${duplicateReceipt}`);
 
+  const orderPageUrl = `${siteUrl}/order/${order.orderId}?t=${order.accessToken}`;
+  const amountStr = (order.amount / 100).toFixed(2);
+
+  // Send "receipt received" email (never blocks upload)
+  sendReceiptReceivedEmail({
+    customerEmail: order.email,
+    customerName: order.name,
+    orderId: order.orderId,
+    pack: order.pack,
+    amount: amountStr,
+    orderPageUrl,
+    reviewTime: config.manualPayment?.reviewTime,
+    replyTo: config.business?.email,
+  })
+    .then(async (sent) => {
+      if (sent) {
+        await store.update(order.orderId, { pendingEmailSentAt: new Date().toISOString() });
+      }
+    })
+    .catch((err) => {
+      console.warn('[Receipt Received Email Error]', err);
+    });
+
   // Send Telegram alert if configured
-  const amountStr = `RM${(order.amount / 100).toFixed(2)}`;
-  const telegramMessage = `🧾 <b>New receipt:</b> ${order.orderId} · ${order.pack} sheets · ${amountStr} · ${order.name}\nCheck your TnG/bank app, then approve at ${siteUrl}/admin`;
+  const telegramMessage = `🧾 <b>New receipt:</b> ${order.orderId} · ${order.pack} sheets · RM${amountStr} · ${order.name}\nCheck your TnG/bank app, then approve at ${siteUrl}/admin`;
   sendTelegramAlert(telegramMessage).catch(console.error);
 
   return {
@@ -287,7 +316,7 @@ export async function processAdminAction(
   siteUrl: string,
   body: {
     orderId: string;
-    action: 'approve' | 'reject' | 'toggle_social_proof';
+    action: 'approve' | 'reject' | 'toggle_social_proof' | 'resend_email';
     reason?: string;
     adminUser?: string;
     hideFromSocialProof?: boolean;
@@ -315,6 +344,68 @@ export async function processAdminAction(
       status: 200,
       body: { ok: true, hideFromSocialProof: nextVal },
     };
+  }
+
+  if (action === 'resend_email') {
+    if (order.status === 'paid') {
+      const downloadUrl = getDownloadLink(order.pack) || '';
+      const orderPageUrl = order.method === 'stripe'
+        ? `${siteUrl}/thank-you?order_id=${order.orderId}&session_id=${order.stripeSessionId || ''}`
+        : `${siteUrl}/order/${order.orderId}?t=${order.accessToken || ''}`;
+      const sent = await sendOrderApprovedEmail({
+        customerEmail: order.email,
+        customerName: order.name,
+        orderId: order.orderId,
+        pack: order.pack,
+        downloadUrl,
+        orderPageUrl,
+        replyTo: config.business?.email,
+      });
+      if (sent) {
+        const now = new Date().toISOString();
+        await store.update(order.orderId, { emailSentAt: now });
+      }
+      return { status: 200, body: { ok: true, message: 'Order approval email resent' } };
+    }
+
+    if (order.status === 'rejected') {
+      const orderPageUrl = `${siteUrl}/order/${order.orderId}?t=${order.accessToken || ''}`;
+      const sent = await sendOrderRejectedEmail({
+        customerEmail: order.email,
+        customerName: order.name,
+        orderId: order.orderId,
+        reason: order.rejectReason || 'Details do not match our payment records',
+        orderPageUrl,
+        replyTo: config.business?.email,
+      });
+      if (sent) {
+        const now = new Date().toISOString();
+        await store.update(order.orderId, { rejectionEmailSentAt: now });
+      }
+      return { status: 200, body: { ok: true, message: 'Payment rejection email resent' } };
+    }
+
+    if (order.status === 'under_review' || order.receiptKey) {
+      const orderPageUrl = `${siteUrl}/order/${order.orderId}?t=${order.accessToken || ''}`;
+      const amountStr = (order.amount / 100).toFixed(2);
+      const sent = await sendReceiptReceivedEmail({
+        customerEmail: order.email,
+        customerName: order.name,
+        orderId: order.orderId,
+        pack: order.pack,
+        amount: amountStr,
+        orderPageUrl,
+        reviewTime: config.manualPayment?.reviewTime,
+        replyTo: config.business?.email,
+      });
+      if (sent) {
+        const now = new Date().toISOString();
+        await store.update(order.orderId, { pendingEmailSentAt: now });
+      }
+      return { status: 200, body: { ok: true, message: 'Receipt received confirmation email resent' } };
+    }
+
+    return { status: 400, body: { error: 'No email can be resent for this order in its current status' } };
   }
 
   // Prevent approving FPX/Stripe orders through manual review flow
@@ -349,7 +440,14 @@ export async function processAdminAction(
       pack: order.pack,
       downloadUrl,
       orderPageUrl,
-    }).catch(console.error);
+      replyTo: config.business?.email,
+    })
+      .then(async (sent) => {
+        if (sent) {
+          await store.update(order.orderId, { emailSentAt: new Date().toISOString() });
+        }
+      })
+      .catch(console.error);
 
     // Send server-side Meta Conversions API purchase event
     sendMetaCapiPurchase(store, { ...order, status: 'paid', paidAt: now }, siteUrl).catch(
@@ -379,6 +477,24 @@ export async function processAdminAction(
     console.log(
       `[ADMIN AUDIT] Order ${order.orderId} REJECTED by ${adminUser || 'admin'}: ${cleanReason}`
     );
+
+    const orderPageUrl = `${siteUrl}/order/${order.orderId}?t=${order.accessToken}`;
+
+    // Send rejection email to customer
+    sendOrderRejectedEmail({
+      customerEmail: order.email,
+      customerName: order.name,
+      orderId: order.orderId,
+      reason: cleanReason,
+      orderPageUrl,
+      replyTo: config.business?.email,
+    })
+      .then(async (sent) => {
+        if (sent) {
+          await store.update(order.orderId, { rejectionEmailSentAt: new Date().toISOString() });
+        }
+      })
+      .catch((err) => console.warn('[Rejection Email Error]', err));
 
     return {
       status: 200,

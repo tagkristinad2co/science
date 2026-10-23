@@ -21,6 +21,9 @@ interface OrderItem {
   accessToken?: string;
   receiptUploadedAt?: string;
   hideFromSocialProof?: boolean;
+  emailSentAt?: string;
+  pendingEmailSentAt?: string;
+  rejectionEmailSentAt?: string;
 }
 
 export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ onNavigate }) => {
@@ -196,6 +199,38 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
     } catch (err) {
       console.error('[Toggle social proof error]', err);
       alert('Failed to update social proof visibility.');
+    } finally {
+      setProcessingAction(null);
+    }
+  };
+
+  const handleResendEmail = async (order: OrderItem) => {
+    if (!confirm(`Resend the latest notification email to ${order.email} for order ${order.orderId}?`)) {
+      return;
+    }
+
+    setProcessingAction(order.orderId);
+    try {
+      const res = await fetch('/api/admin/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: order.orderId,
+          action: 'resend_email',
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Failed to resend email');
+        return;
+      }
+
+      alert(data.message || 'Email resent successfully!');
+      fetchOrders(tab, search);
+    } catch (err) {
+      console.error('[Resend email error]', err);
+      alert('Failed to resend email.');
     } finally {
       setProcessingAction(null);
     }
@@ -607,6 +642,69 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
                       <strong>Rejection reason:</strong> {o.rejectReason}
                     </div>
                   )}
+
+                  {/* Email delivery status */}
+                  <div
+                    style={{
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '10px',
+                      padding: '10px 14px',
+                      marginBottom: '14px',
+                      fontSize: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '8px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', color: '#475569' }}>
+                      <span style={{ fontWeight: 800, color: 'var(--navy)' }}>✉️ Notification Emails:</span>
+                      {o.pendingEmailSentAt && (
+                        <span style={{ background: '#fef3c7', color: '#92400e', padding: '3px 8px', borderRadius: '4px', fontWeight: 700, fontSize: '11px' }}>
+                          ⏳ Pending: {new Date(o.pendingEmailSentAt).toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                        </span>
+                      )}
+                      {o.emailSentAt && (
+                        <span style={{ background: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: '4px', fontWeight: 700, fontSize: '11px' }}>
+                          ✓ Approved: {new Date(o.emailSentAt).toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                        </span>
+                      )}
+                      {o.rejectionEmailSentAt && (
+                        <span style={{ background: '#fee2e2', color: '#991b1b', padding: '3px 8px', borderRadius: '4px', fontWeight: 700, fontSize: '11px' }}>
+                          ✕ Rejected: {new Date(o.rejectionEmailSentAt).toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                        </span>
+                      )}
+                      {!o.pendingEmailSentAt && !o.emailSentAt && !o.rejectionEmailSentAt && (
+                        <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>None sent yet</span>
+                      )}
+                    </div>
+
+                    {(o.status === 'paid' || o.status === 'rejected' || o.status === 'under_review' || o.receiptKey) && (
+                      <button
+                        type="button"
+                        disabled={processingAction === o.orderId}
+                        onClick={() => handleResendEmail(o)}
+                        style={{
+                          padding: '5px 12px',
+                          background: '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '6px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          color: 'var(--purple)',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                        title="Resend the latest notification email to customer"
+                      >
+                        {processingAction === o.orderId ? 'Sending…' : '🔄 Resend email'}
+                      </button>
+                    )}
+                  </div>
 
                   {/* Actions / Receipt preview */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', paddingTop: '8px' }}>

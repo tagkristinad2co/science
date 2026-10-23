@@ -20,6 +20,8 @@ export interface Order {
   createdAt: string;
   paidAt?: string;
   emailSentAt?: string;
+  pendingEmailSentAt?: string;
+  rejectionEmailSentAt?: string;
   hideFromSocialProof?: boolean;
 
   // Meta Pixel & Conversions API fields
