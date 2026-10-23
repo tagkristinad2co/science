@@ -52,8 +52,7 @@ export const SecurityPolicyPage: React.FC<SecurityPolicyPageProps> = ({ onNaviga
 
       <section id="section-3" style={{ scrollMarginTop: '80px' }}>
         <p>
-          <strong>3. Payment security.</strong> Payments are made on toyyibPay's secure payment page through the FPX
-          network. We do not receive, process or store your online banking credentials, PINs or card numbers.
+          <strong>3. Payment security.</strong> Payments are made on Stripe's secure checkout page. We do not receive, process or store your online banking credentials, PINs or card numbers.
         </p>
       </section>
 
@@ -62,9 +61,9 @@ export const SecurityPolicyPage: React.FC<SecurityPolicyPageProps> = ({ onNaviga
           <strong>4. Payment verification.</strong> We confirm every payment on our servers before delivering any files:
         </p>
         <ul style={{ paddingLeft: '24px', margin: '12px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <li>each payment notification from toyyibPay must carry a valid security signature;</li>
-          <li>it must match the bill created for your order;</li>
-          <li>we check the payment status and the exact amount directly with toyyibPay.</li>
+          <li>each payment notification from Stripe must carry a valid Stripe signature;</li>
+          <li>it must match the checkout session created for your order;</li>
+          <li>we check the amount and currency.</li>
         </ul>
         <p>Download links are released only after these checks pass.</p>
       </section>
@@ -72,8 +71,9 @@ export const SecurityPolicyPage: React.FC<SecurityPolicyPageProps> = ({ onNaviga
       <section id="section-5" style={{ scrollMarginTop: '80px' }}>
         <p>
           <strong>5. What we store.</strong> For each order we store: order number, pack, amount, your name, email address
-          and phone number, payment status, toyyibPay bill code and reference number, and the order date. This is stored with
-          our hosting provider, and only our server can access it. It is not visible to other visitors.
+          and phone number, payment status, Stripe session and payment reference, receipt images you upload and your
+          reference number, and the order date. This is stored with our hosting provider, and only our server can access it.
+          Receipts are only visible to the business owner. It is not visible to other visitors.
         </p>
       </section>
 
@@ -104,7 +104,7 @@ export const SecurityPolicyPage: React.FC<SecurityPolicyPageProps> = ({ onNaviga
         </p>
         <ul style={{ paddingLeft: '24px', margin: '12px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <li>Keep your download link private. Anyone with the link may be able to download the files.</li>
-          <li>Only enter your details on science.bloxmath.quest and on toyyibPay's payment page.</li>
+          <li>Only enter your details on science.bloxmath.quest and on Stripe's secure checkout page.</li>
           <li>We will never ask for your banking password, PIN or TAC by email, phone or WhatsApp.</li>
         </ul>
       </section>

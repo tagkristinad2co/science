@@ -12,7 +12,7 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({
   onScrollToPricing,
   price100,
   countdown,
-  allowsCards = false,
+  allowsCards: _allowsCards = false,
 }) => {
   return (
     <section className="section navy">
@@ -52,7 +52,7 @@ export const FinalCTA: React.FC<FinalCTAProps> = ({
         </div>
 
         <div style={{ fontSize: '12px', color: '#bdd0e5', marginTop: '16px' }}>
-          Instant download · {allowsCards ? 'FPX & card' : 'FPX online banking'} · Secure toyyibPay checkout
+          Instant download · 🔒 Secure checkout by Stripe
         </div>
       </div>
     </section>

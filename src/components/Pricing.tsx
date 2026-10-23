@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CountdownState } from '../hooks/useFoundingTimer';
+import { config } from '../config';
 
 interface PricingProps {
   onCheckout: (includeUpgrade: boolean) => void;
@@ -24,7 +25,7 @@ export const Pricing: React.FC<PricingProps> = ({
   perSheet100,
   perSheet200,
   countdown,
-  allowsCards = false,
+  allowsCards: _allowsCards = false,
 }) => {
   const [includeUpgrade, setIncludeUpgrade] = useState(false);
 
@@ -166,7 +167,7 @@ export const Pricing: React.FC<PricingProps> = ({
           </button>
 
           <div style={{ fontSize: '12px', color: '#65728d', marginTop: '16px' }}>
-            🔒 Secure checkout by toyyibPay · {allowsCards ? 'FPX online banking & cards accepted' : 'FPX online banking accepted'}
+            🔒 {config.onlinePaymentLabel} via Stripe (instant) · DuitNow & Touch 'n Go QR (manual)
           </div>
         </div>
       </div>

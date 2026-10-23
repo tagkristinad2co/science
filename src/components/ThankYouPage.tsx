@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { config } from '../config';
 
 interface ThankYouPageProps {
   onBackToHome: () => void;
@@ -10,6 +9,7 @@ interface OrderStatusResponse {
   orderId?: string;
   pack?: '100' | '200';
   downloadUrl?: string;
+  downloadLink?: string;
   email?: string;
   error?: string;
 }
@@ -20,10 +20,10 @@ export const ThankYouPage: React.FC<ThankYouPageProps> = ({ onBackToHome }) => {
   const [timedOut, setTimedOut] = useState(false);
   const [secondsWaited, setSecondsWaited] = useState(0);
 
-  // Extract order_id and billcode from URL
+  // Extract order_id and session_id from URL
   const query = new URLSearchParams(window.location.search);
   const orderId = query.get('order_id') || query.get('orderId') || '';
-  const billCode = query.get('billcode') || query.get('billCode') || '';
+  const sessionId = query.get('session_id') || query.get('sessionId') || '';
 
   useEffect(() => {
     let intervalId: any = null;
@@ -37,7 +37,9 @@ export const ThankYouPage: React.FC<ThankYouPageProps> = ({ onBackToHome }) => {
       }
 
       try {
-        const res = await fetch(`/api/order-status?order_id=${encodeURIComponent(orderId)}&billcode=${encodeURIComponent(billCode)}`);
+        const res = await fetch(
+          `/api/order-status?order_id=${encodeURIComponent(orderId)}&session_id=${encodeURIComponent(sessionId)}`
+        );
         const data: OrderStatusResponse = await res.json();
 
         setOrderData(data);
@@ -71,7 +73,9 @@ export const ThankYouPage: React.FC<ThankYouPageProps> = ({ onBackToHome }) => {
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [orderId, billCode]);
+  }, [orderId, sessionId]);
+
+  const downloadLink = orderData?.downloadLink || orderData?.downloadUrl;
 
   return (
     <main id="main" className="section alt" style={{ minHeight: '75vh', display: 'flex', alignItems: 'center' }}>
@@ -90,9 +94,9 @@ export const ThankYouPage: React.FC<ThankYouPageProps> = ({ onBackToHome }) => {
           {loading && !orderData?.status && (
             <div>
               <div style={{ fontSize: '42px', marginBottom: '14px' }}>⏳</div>
-              <h2>Checking payment status…</h2>
+              <h2>Confirming your payment with Stripe…</h2>
               <p style={{ color: '#5a667f', fontSize: '15px' }}>
-                Please wait while we confirm your transaction with toyyibPay.
+                Please wait while we confirm your transaction.
               </p>
             </div>
           )}
@@ -123,9 +127,9 @@ export const ThankYouPage: React.FC<ThankYouPageProps> = ({ onBackToHome }) => {
                 Your order is confirmed! Click the button below to download your complete printable PDF collection.
               </p>
 
-              {orderData.downloadUrl && (
+              {downloadLink && (
                 <a
-                  href={orderData.downloadUrl}
+                  href={downloadLink}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn-lime"
@@ -170,10 +174,9 @@ export const ThankYouPage: React.FC<ThankYouPageProps> = ({ onBackToHome }) => {
           {orderData?.status === 'pending' && !timedOut && (
             <div>
               <div style={{ fontSize: '42px', marginBottom: '14px' }}>⏳</div>
-              <h2>Your payment is being confirmed…</h2>
+              <h2>Confirming your payment with Stripe…</h2>
               <p style={{ color: '#5a667f', fontSize: '15px', lineHeight: 1.6 }}>
-                We are communicating with the Malaysian banking network via toyyibPay to confirm your payment.
-                This page will update automatically.
+                Please wait while we confirm your transaction. This page will update automatically.
               </p>
               <div style={{ fontSize: '12px', color: '#7a8599', marginTop: '16px' }}>
                 Checking status… ({secondsWaited}s)
@@ -186,11 +189,7 @@ export const ThankYouPage: React.FC<ThankYouPageProps> = ({ onBackToHome }) => {
               <div style={{ fontSize: '42px', marginBottom: '14px' }}>ℹ️</div>
               <h2>Still processing</h2>
               <p style={{ color: '#5a667f', fontSize: '15px', lineHeight: 1.6 }}>
-                Your bank is still completing verification. Check your email inbox shortly, or contact us at{' '}
-                <a href={`mailto:${config.supportEmail}`} style={{ color: 'var(--purple)', fontWeight: 700 }}>
-                  {config.supportEmail}
-                </a>{' '}
-                with your order reference <strong style={{ color: 'var(--navy)' }}>{orderId}</strong>.
+                Still processing. Some bank payments take a few minutes. We'll email your download link as soon as it's confirmed. Order number: <strong style={{ color: 'var(--navy)' }}>{orderId}</strong>.
               </p>
               <button
                 type="button"

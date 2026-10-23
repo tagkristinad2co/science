@@ -1,6 +1,7 @@
 import type { Config, Context } from '@netlify/functions';
 import { NetlifyBlobsOrderStore } from '../../server-lib/order-store-blobs.ts';
-import { processOrderStatus } from '../../server-lib/core.ts';
+import { processStripeOrderStatus } from '../../server-lib/stripe.ts';
+import { getEnv } from '../../server-lib/env.ts';
 
 const store = new NetlifyBlobsOrderStore();
 
@@ -8,9 +9,10 @@ export default async (req: Request, _context: Context): Promise<Response> => {
   try {
     const url = new URL(req.url);
     const orderId = (url.searchParams.get('order_id') || url.searchParams.get('orderId') || '').trim();
-    const billcode = (url.searchParams.get('billcode') || url.searchParams.get('billCode') || '').trim();
+    const sessionId = (url.searchParams.get('session_id') || url.searchParams.get('sessionId') || '').trim();
+    const siteUrl = getEnv('SITE_URL') || new URL(req.url).origin;
 
-    const result = await processOrderStatus(store, orderId, billcode || undefined);
+    const result = await processStripeOrderStatus(store, orderId, sessionId, siteUrl);
 
     return new Response(JSON.stringify(result.body), {
       status: result.status,

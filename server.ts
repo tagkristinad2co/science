@@ -3,14 +3,32 @@ import type { Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import fs from 'fs';
-import { InMemoryOrderStore } from './server-lib/order-store-memory.ts';
+import multer from 'multer';
+import { InMemoryOrderStore, InMemoryReceiptStore } from './server-lib/order-store-memory.ts';
 import {
-  processCheckout,
-  processCallback,
-  processOrderStatus,
-  getPaymentMethodsInfo,
-} from './server-lib/core.ts';
+  processStripeCheckout,
+  processStripeWebhook,
+  processStripeOrderStatus,
+} from './server-lib/stripe.ts';
+import {
+  processManualCreate,
+  processManualGetOrder,
+  processManualReceiptUpload,
+  processManualStatus,
+  processAdminListOrders,
+  processAdminAction,
+  processAdminGetReceipt,
+} from './server-lib/manual.ts';
+import {
+  checkAdminLoginRateLimit,
+  recordFailedAdminLogin,
+  recordSuccessfulAdminLogin,
+  verifyAdminPassword,
+  createAdminSessionCookie,
+  parseCookies,
+  verifyAdminSession,
+} from './server-lib/admin-auth.ts';
+import type { OrderStatus } from './server-lib/types.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,12 +38,24 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 console.log('DEV preview: orders are in memory, not for real payments');
 const devStore = new InMemoryOrderStore();
+const devReceiptStore = new InMemoryReceiptStore();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 4 * 1024 * 1024 }, // 4MB
+});
 
 // Enable trust proxy
 app.set('trust proxy', 1);
 
-// Body parsers
-app.use(express.json());
+// Body parsers with raw body retention for Stripe webhooks
+app.use(
+  express.json({
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 
 function getSiteUrl(req: Request): string {
@@ -45,38 +75,177 @@ const checkoutLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Public endpoint for payment channel info
+// Public endpoint for payment methods info
 app.get('/api/payment-methods', (_req: Request, res: Response) => {
-  res.json(getPaymentMethodsInfo());
+  res.json({
+    onlineLabel: 'Card & FPX online banking',
+    manualEnabled: true,
+  });
 });
 
-// 1. POST /api/checkout
+// 1. POST /api/checkout (Stripe Checkout)
 app.post('/api/checkout', checkoutLimiter, async (req: Request, res: Response): Promise<void> => {
   const siteUrl = getSiteUrl(req);
-  const result = await processCheckout(devStore, siteUrl, req.body);
+  const result = await processStripeCheckout(devStore, siteUrl, req.body);
   res.status(result.status).json(result.body);
 });
 
-// 2. POST /api/toyyibpay/callback
-app.post('/api/toyyibpay/callback', async (req: Request, res: Response): Promise<void> => {
-  // req.body has key-value pairs parsed by express.urlencoded
-  const params: Record<string, string> = {};
-  if (req.body && typeof req.body === 'object') {
-    for (const [key, val] of Object.entries(req.body)) {
-      params[key] = String(val);
-    }
-  }
-  const result = await processCallback(devStore, params);
-  res.status(result.status).send(result.text);
+// 2. POST /api/stripe/webhook (Stripe Webhook)
+app.post('/api/stripe/webhook', async (req: Request, res: Response): Promise<void> => {
+  const rawBody = (req as any).rawBody ? (req as any).rawBody.toString('utf8') : JSON.stringify(req.body);
+  const signature = req.headers['stripe-signature'] as string;
+  const siteUrl = getSiteUrl(req);
+  const result = await processStripeWebhook(devStore, rawBody, signature, siteUrl);
+  res.status(result.status).json(result.body);
 });
 
-// 3. GET /api/order-status
+// 3. GET /api/order-status (Stripe Order Status)
 app.get('/api/order-status', async (req: Request, res: Response): Promise<void> => {
   const orderId = (req.query.order_id || req.query.orderId || '').toString();
-  const billCode = (req.query.billcode || req.query.billCode || '').toString();
+  const sessionId = (req.query.session_id || req.query.sessionId || '').toString();
+  const siteUrl = getSiteUrl(req);
 
-  const result = await processOrderStatus(devStore, orderId, billCode || undefined);
+  const result = await processStripeOrderStatus(devStore, orderId, sessionId, siteUrl);
   res.status(result.status).json(result.body);
+});
+
+// 4. POST /api/manual/create
+app.post('/api/manual/create', checkoutLimiter, async (req: Request, res: Response): Promise<void> => {
+  const result = await processManualCreate(devStore, req.body);
+  res.status(result.status).json(result.body);
+});
+
+// 5. GET /api/manual/order
+app.get('/api/manual/order', async (req: Request, res: Response): Promise<void> => {
+  const orderId = (req.query.order_id || req.query.orderId || '').toString();
+  const token = (req.query.token || req.query.t || '').toString();
+  const result = await processManualGetOrder(devStore, orderId, token);
+  res.status(result.status).json(result.body);
+});
+
+// 6. POST /api/manual/receipt
+app.post(
+  '/api/manual/receipt',
+  upload.fields([
+    { name: 'file', maxCount: 1 },
+    { name: 'receipt', maxCount: 1 },
+  ]),
+  async (req: Request, res: Response): Promise<void> => {
+    const orderId = (req.body.orderId || req.body.order_id || '').toString();
+    const token = (req.body.token || '').toString();
+    const reference = (req.body.reference || req.body.customerReference || '').toString();
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+    const file = files?.['file']?.[0] || files?.['receipt']?.[0];
+
+    if (!file) {
+      res.status(400).json({ error: 'Please choose a receipt file to upload.' });
+      return;
+    }
+
+    const siteUrl = getSiteUrl(req);
+    const result = await processManualReceiptUpload(devStore, devReceiptStore, siteUrl, {
+      orderId,
+      token,
+      fileBuffer: file.buffer,
+      fileName: file.originalname,
+      customerReference: reference,
+    });
+
+    res.status(result.status).json(result.body);
+  }
+);
+
+// 7. GET /api/manual/status
+app.get('/api/manual/status', async (req: Request, res: Response): Promise<void> => {
+  const orderId = (req.query.order_id || req.query.orderId || '').toString();
+  const token = (req.query.token || req.query.t || '').toString();
+  const result = await processManualStatus(devStore, orderId, token);
+  res.status(result.status).json(result.body);
+});
+
+// 8. POST /api/admin/login
+app.post('/api/admin/login', (req: Request, res: Response): void => {
+  const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
+
+  if (!checkAdminLoginRateLimit(clientIp)) {
+    res.status(429).json({ error: 'Too many failed login attempts. Please try again in 15 minutes.' });
+    return;
+  }
+
+  const password = req.body?.password || '';
+  if (!verifyAdminPassword(password)) {
+    recordFailedAdminLogin(clientIp);
+    res.status(401).json({ error: 'Incorrect admin password.' });
+    return;
+  }
+
+  recordSuccessfulAdminLogin(clientIp);
+  try {
+    const { cookieValue, expires } = createAdminSessionCookie();
+
+    res.cookie('admin_session', cookieValue, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      expires,
+      path: '/',
+    });
+
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Admin configuration error' });
+  }
+});
+
+// Admin auth middleware for Express
+function requireAdminAuth(req: Request, res: Response, next: () => void) {
+  const cookies = parseCookies(req.headers.cookie);
+  if (!verifyAdminSession(cookies.admin_session)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  next();
+}
+
+// 9. GET /api/admin/orders
+app.get('/api/admin/orders', requireAdminAuth, async (req: Request, res: Response): Promise<void> => {
+  const tab = (req.query.tab || 'to_review').toString();
+  const search = req.query.search ? req.query.search.toString() : undefined;
+
+  let statusFilter: OrderStatus | undefined = undefined;
+  if (tab === 'to_review') statusFilter = 'under_review';
+  else if (tab === 'awaiting_payment') statusFilter = 'awaiting_payment';
+
+  const result = await processAdminListOrders(devStore, { status: statusFilter, search });
+  res.status(result.status).json(result.body);
+});
+
+// 10. POST /api/admin/action
+app.post('/api/admin/action', requireAdminAuth, async (req: Request, res: Response): Promise<void> => {
+  const siteUrl = getSiteUrl(req);
+  const result = await processAdminAction(devStore, siteUrl, {
+    orderId: req.body.orderId,
+    action: req.body.action,
+    reason: req.body.reason,
+    adminUser: 'owner',
+  });
+  res.status(result.status).json(result.body);
+});
+
+// 11. GET /api/admin/receipt
+app.get('/api/admin/receipt', requireAdminAuth, async (req: Request, res: Response): Promise<void> => {
+  const orderId = (req.query.order_id || req.query.orderId || '').toString();
+  const result = await processAdminGetReceipt(devStore, devReceiptStore, orderId);
+
+  if (result.status !== 200 || !result.data) {
+    res.status(result.status).send(result.error || 'Receipt not found');
+    return;
+  }
+
+  res.setHeader('Content-Type', result.contentType || 'application/octet-stream');
+  res.setHeader('Content-Length', result.data.length);
+  res.setHeader('Cache-Control', 'private, no-cache');
+  res.send(result.data);
 });
 
 // Setup dev server with Vite middleware or static serving

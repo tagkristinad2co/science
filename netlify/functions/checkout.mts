@@ -1,6 +1,6 @@
 import type { Config, Context } from '@netlify/functions';
 import { NetlifyBlobsOrderStore } from '../../server-lib/order-store-blobs.ts';
-import { processCheckout } from '../../server-lib/core.ts';
+import { processStripeCheckout } from '../../server-lib/stripe.ts';
 import { getEnv } from '../../server-lib/env.ts';
 
 const store = new NetlifyBlobsOrderStore();
@@ -16,7 +16,7 @@ export default async (req: Request, _context: Context): Promise<Response> => {
   try {
     const body = await req.json();
     const siteUrl = getEnv('SITE_URL') || new URL(req.url).origin;
-    const result = await processCheckout(store, siteUrl, body);
+    const result = await processStripeCheckout(store, siteUrl, body);
 
     return new Response(JSON.stringify(result.body), {
       status: result.status,

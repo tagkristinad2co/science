@@ -128,7 +128,7 @@ export const TermsPage: React.FC<TermsPageProps> = ({ onNavigate, onOpenPolicy }
           >
             Payment Policy
           </button>
-          . The price that applies to your order is the price shown on the toyyibPay payment page when your order is created.
+          . The price that applies to your order is the price shown on the Stripe checkout page (or on your QR order page) when your order is created.
         </p>
       </section>
 

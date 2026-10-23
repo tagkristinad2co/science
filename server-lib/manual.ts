@@ -1,0 +1,385 @@
+import crypto from 'crypto';
+import type { Order, OrderStore, ReceiptStore, OrderStatus, OrderMethod } from './types.ts';
+import { calculatePrice } from '../shared/pricing.ts';
+import { validateCheckoutInput, generateOrderId, maskEmail } from './validation.ts';
+import { getDownloadLink } from './downloads.ts';
+import { detectFileType } from './magic-bytes.ts';
+import { constantTimeTokenCompare } from './admin-auth.ts';
+import { sendTelegramAlert, sendOrderApprovedEmail } from './notifications.ts';
+
+export async function processManualCreate(
+  store: OrderStore,
+  body: any
+): Promise<{ status: number; body: any }> {
+  const validation = validateCheckoutInput(body);
+  if (!validation.ok) {
+    return { status: 400, body: { error: validation.error } };
+  }
+
+  const { pack, name, email, phone } = validation.value;
+
+  const downloadLink = getDownloadLink(pack);
+  if (!downloadLink) {
+    console.error(`[Manual Checkout Blocked] Download link not set for pack ${pack}.`);
+    return {
+      status: 500,
+      body: { error: 'Download link is not configured for this pack. Please contact support.' },
+    };
+  }
+
+  const pricing = calculatePrice(pack);
+  const orderId = generateOrderId();
+  const accessToken = crypto.randomBytes(32).toString('hex');
+  const createdAt = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+  const newOrder: Order = {
+    orderId,
+    pack,
+    amount: pricing.amountCents,
+    name,
+    email,
+    phone,
+    method: 'manual',
+    status: 'awaiting_payment',
+    createdAt,
+    expiresAt,
+    accessToken,
+  };
+
+  try {
+    await store.create(newOrder);
+    console.log(`[Manual Order Created] ${orderId} (pack ${pack})`);
+    return {
+      status: 200,
+      body: { orderId, accessToken },
+    };
+  } catch (err) {
+    console.error('[Manual Order Store Error]', err);
+    return { status: 500, body: { error: "We couldn't save your order. Please try again." } };
+  }
+}
+
+export async function processManualGetOrder(
+  store: OrderStore,
+  orderId: string,
+  token?: string
+): Promise<{ status: number; body: any }> {
+  if (!orderId || !token) {
+    return { status: 404, body: { error: 'Order not found' } };
+  }
+
+  const order = await store.get(orderId);
+  if (!order || !order.accessToken) {
+    return { status: 404, body: { error: 'Order not found' } };
+  }
+
+  if (!constantTimeTokenCompare(token, order.accessToken)) {
+    return { status: 404, body: { error: 'Order not found' } };
+  }
+
+  const isExpired =
+    order.status === 'awaiting_payment' &&
+    order.expiresAt &&
+    Date.now() > new Date(order.expiresAt).getTime();
+
+  if (order.status === 'paid') {
+    const downloadUrl = getDownloadLink(order.pack);
+    return {
+      status: 200,
+      body: {
+        status: 'paid',
+        orderId: order.orderId,
+        pack: order.pack,
+        amount: order.amount,
+        name: order.name,
+        email: maskEmail(order.email),
+        phone: order.phone,
+        downloadUrl,
+        downloadLink: downloadUrl,
+        paidAt: order.paidAt,
+      },
+    };
+  }
+
+  return {
+    status: 200,
+    body: {
+      status: isExpired ? 'expired' : order.status,
+      orderId: order.orderId,
+      pack: order.pack,
+      amount: order.amount,
+      name: order.name,
+      email: maskEmail(order.email),
+      phone: order.phone,
+      createdAt: order.createdAt,
+      expiresAt: order.expiresAt,
+      customerReference: order.customerReference,
+      receiptUploadedAt: order.receiptUploadedAt,
+      rejectReason: order.rejectReason,
+    },
+  };
+}
+
+export async function processManualReceiptUpload(
+  store: OrderStore,
+  receiptStore: ReceiptStore,
+  siteUrl: string,
+  params: {
+    orderId: string;
+    token: string;
+    fileBuffer: Buffer;
+    fileName?: string;
+    customerReference?: string;
+  }
+): Promise<{ status: number; body: any }> {
+  const { orderId, token, fileBuffer, customerReference } = params;
+
+  if (!orderId || !token) {
+    return { status: 404, body: { error: 'Order not found' } };
+  }
+
+  const order = await store.get(orderId);
+  if (!order || !order.accessToken) {
+    return { status: 404, body: { error: 'Order not found' } };
+  }
+
+  if (!constantTimeTokenCompare(token, order.accessToken)) {
+    return { status: 404, body: { error: 'Order not found' } };
+  }
+
+  // Allowed only when status is "awaiting_payment" or "rejected"
+  if (order.status !== 'awaiting_payment' && order.status !== 'rejected') {
+    return {
+      status: 400,
+      body: { error: `Receipt upload not allowed when order is ${order.status}` },
+    };
+  }
+
+  // Max 4 MB
+  const MAX_SIZE = 4 * 1024 * 1024;
+  if (!fileBuffer || fileBuffer.length === 0) {
+    return { status: 400, body: { error: 'No file uploaded.' } };
+  }
+  if (fileBuffer.length > MAX_SIZE) {
+    return { status: 400, body: { error: 'File size must be 4 MB or less.' } };
+  }
+
+  // Check magic bytes
+  const detected = detectFileType(fileBuffer);
+  if (!detected) {
+    return {
+      status: 400,
+      body: { error: 'Invalid file format. Please upload a JPG, PNG, WEBP, or PDF file.' },
+    };
+  }
+
+  // Calculate SHA-256 hash
+  const sha256 = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+
+  // Check duplicate hash
+  const duplicate = await store.findByReceiptHash(sha256, order.orderId);
+  const duplicateReceipt = Boolean(duplicate);
+  const duplicateOrderId = duplicate?.orderId;
+
+  const key = `${order.orderId}_${Date.now()}.${detected.extension}`;
+  await receiptStore.save(key, fileBuffer, detected.mime);
+
+  await store.update(order.orderId, {
+    status: 'under_review',
+    receiptKey: key,
+    receiptContentType: detected.mime,
+    receiptSha256: sha256,
+    duplicateReceipt,
+    duplicateOrderId,
+    customerReference: customerReference?.trim() || '',
+    receiptUploadedAt: new Date().toISOString(),
+  });
+
+  console.log(`[Receipt Uploaded] Order ${order.orderId} moved to under_review. Duplicate: ${duplicateReceipt}`);
+
+  // Send Telegram alert if configured
+  const amountStr = `RM${(order.amount / 100).toFixed(2)}`;
+  const telegramMessage = `🧾 <b>New receipt:</b> ${order.orderId} · ${order.pack} sheets · ${amountStr} · ${order.name}\nCheck your TnG/bank app, then approve at ${siteUrl}/admin`;
+  sendTelegramAlert(telegramMessage).catch(console.error);
+
+  return {
+    status: 200,
+    body: { ok: true, status: 'under_review' },
+  };
+}
+
+export async function processManualStatus(
+  store: OrderStore,
+  orderId: string,
+  token?: string
+): Promise<{ status: number; body: any }> {
+  if (!orderId || !token) {
+    return { status: 404, body: { error: 'Order not found' } };
+  }
+
+  const order = await store.get(orderId);
+  if (!order || !order.accessToken) {
+    return { status: 404, body: { error: 'Order not found' } };
+  }
+
+  if (!constantTimeTokenCompare(token, order.accessToken)) {
+    return { status: 404, body: { error: 'Order not found' } };
+  }
+
+  if (order.status === 'paid') {
+    const downloadUrl = getDownloadLink(order.pack);
+    return {
+      status: 200,
+      body: {
+        status: 'paid',
+        orderId: order.orderId,
+        pack: order.pack,
+        downloadUrl,
+      },
+    };
+  }
+
+  return {
+    status: 200,
+    body: {
+      status: order.status,
+      orderId: order.orderId,
+      rejectReason: order.rejectReason,
+    },
+  };
+}
+
+export async function processAdminListOrders(
+  store: OrderStore,
+  options?: { status?: OrderStatus; method?: OrderMethod; search?: string }
+): Promise<{ status: number; body: any }> {
+  const orders = await store.list(options);
+
+  // If status === 'under_review', sort oldest first
+  if (options?.status === 'under_review') {
+    orders.sort(
+      (a, b) =>
+        new Date(a.receiptUploadedAt || a.createdAt).getTime() -
+        new Date(b.receiptUploadedAt || b.createdAt).getTime()
+    );
+  }
+
+  return {
+    status: 200,
+    body: { orders },
+  };
+}
+
+export async function processAdminAction(
+  store: OrderStore,
+  siteUrl: string,
+  body: {
+    orderId: string;
+    action: 'approve' | 'reject';
+    reason?: string;
+    adminUser?: string;
+  }
+): Promise<{ status: number; body: any }> {
+  const { orderId, action, reason, adminUser } = body;
+  if (!orderId || !action) {
+    return { status: 400, body: { error: 'Missing orderId or action' } };
+  }
+
+  const order = await store.get(orderId);
+  if (!order) {
+    return { status: 404, body: { error: 'Order not found' } };
+  }
+
+  // Prevent approving FPX orders through manual review flow
+  if (order.method !== 'manual') {
+    return { status: 400, body: { error: 'Cannot approve non-manual order from manual review' } };
+  }
+
+  if (action === 'approve') {
+    if (order.status === 'paid') {
+      return { status: 200, body: { ok: true, status: 'paid', message: 'Already paid' } };
+    }
+
+    const now = new Date().toISOString();
+    await store.update(order.orderId, {
+      status: 'paid',
+      paidAt: now,
+      approvedAt: now,
+    });
+
+    console.log(
+      `[ADMIN AUDIT] Order ${order.orderId} APPROVED by ${adminUser || 'admin'} at ${now}`
+    );
+
+    const downloadUrl = getDownloadLink(order.pack) || '';
+    const orderPageUrl = `${siteUrl}/order/${order.orderId}?t=${order.accessToken}`;
+
+    // Send customer email via Resend if configured
+    sendOrderApprovedEmail({
+      customerEmail: order.email,
+      customerName: order.name,
+      orderId: order.orderId,
+      pack: order.pack,
+      downloadUrl,
+      orderPageUrl,
+    }).catch(console.error);
+
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        status: 'paid',
+        orderPageUrl,
+        downloadUrl,
+      },
+    };
+  } else if (action === 'reject') {
+    const cleanReason = (reason || '').trim();
+    if (!cleanReason) {
+      return { status: 400, body: { error: 'Please provide a reason for rejection.' } };
+    }
+
+    await store.update(order.orderId, {
+      status: 'rejected',
+      rejectReason: cleanReason,
+    });
+
+    console.log(
+      `[ADMIN AUDIT] Order ${order.orderId} REJECTED by ${adminUser || 'admin'}: ${cleanReason}`
+    );
+
+    return {
+      status: 200,
+      body: { ok: true, status: 'rejected' },
+    };
+  }
+
+  return { status: 400, body: { error: 'Invalid action' } };
+}
+
+export async function processAdminGetReceipt(
+  store: OrderStore,
+  receiptStore: ReceiptStore,
+  orderId: string
+): Promise<{ status: number; data?: Buffer; contentType?: string; error?: string }> {
+  if (!orderId) {
+    return { status: 400, error: 'Missing orderId' };
+  }
+
+  const order = await store.get(orderId);
+  if (!order || !order.receiptKey) {
+    return { status: 404, error: 'Receipt not found' };
+  }
+
+  const receipt = await receiptStore.get(order.receiptKey);
+  if (!receipt) {
+    return { status: 404, error: 'Receipt file not found in storage' };
+  }
+
+  return {
+    status: 200,
+    data: receipt.data,
+    contentType: receipt.contentType,
+  };
+}

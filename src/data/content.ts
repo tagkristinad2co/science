@@ -91,7 +91,7 @@ export const getFaqItems = (
   endDateText: string,
   upgrade: string,
   bundlePrice: string,
-  allowsCards: boolean = false
+  _allowsCards: boolean = false
 ): FAQItem[] => {
   const items: FAQItem[] = [];
 
@@ -114,9 +114,7 @@ export const getFaqItems = (
     },
     {
       question: 'Which payment methods can I use?',
-      answer: allowsCards
-        ? "FPX online banking and debit/credit cards, through toyyibPay's secure checkout."
-        : "FPX online banking, through toyyibPay's secure checkout.",
+      answer: `Pay online with ${config.onlinePaymentLabel} through Stripe's secure checkout for an instant download, or pay by DuitNow / Touch 'n Go eWallet QR and upload your receipt. We'll unlock your download after checking the payment, usually ${config.manualPayment.reviewTime}.`,
     },
     {
       question: 'What age is it for?',

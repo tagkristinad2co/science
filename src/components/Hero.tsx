@@ -1,5 +1,6 @@
 import React from 'react';
 import { CountdownState } from '../hooks/useFoundingTimer';
+import { config } from '../config';
 
 interface HeroProps {
   onScrollToPricing: () => void;
@@ -18,7 +19,7 @@ export const Hero: React.FC<HeroProps> = ({
   perSheet100,
   futurePrice100,
   countdown,
-  allowsCards = false,
+  allowsCards: _allowsCards = false,
 }) => {
   return (
     <section className="section" style={{ paddingTop: '48px', paddingBottom: '48px' }}>
@@ -166,8 +167,8 @@ export const Hero: React.FC<HeroProps> = ({
 
           <div className="offer-trust">
             <span>⚡ Instant download</span>
-            <span>🔒 Secure toyyibPay checkout</span>
-            <span>{allowsCards ? '🏦 FPX & card' : '🏦 FPX online banking'}</span>
+            <span>🔒 Secure checkout by Stripe</span>
+            <span>💳 {config.onlinePaymentLabel}</span>
           </div>
         </div>
       </div>

@@ -17,6 +17,12 @@ export interface BusinessConfig {
   responseTime: string;
 }
 
+export interface ManualPaymentConfig {
+  enabled: boolean;
+  accountName: string;
+  reviewTime: string;
+}
+
 export interface SMVConfig {
   foundingEndsAt: string;
   founding: PricingTier;
@@ -29,12 +35,15 @@ export interface SMVConfig {
   testimonials: Testimonial[];
   business: BusinessConfig;
   policiesLastUpdated: string;
+  manualPayment: ManualPaymentConfig;
+  onlinePaymentLabel: string;
 }
 
 export const config: SMVConfig = {
   foundingEndsAt: FOUNDING_ENDS_AT,
   founding: PRICING_CONFIG.founding,
   official: PRICING_CONFIG.official,
+  onlinePaymentLabel: "Card & FPX online banking",
   supportEmail: "support.mathceria@gmail.com",
   privacyUrl: "",
   termsUrl: "/terms",
@@ -50,6 +59,11 @@ export const config: SMVConfig = {
     responseTime: "2 working days",
   },
   policiesLastUpdated: "22 October 2026",
+  manualPayment: {
+    enabled: true,
+    accountName: "[NAME SHOWN ON QR]",
+    reviewTime: "within 24 hours (usually much faster, 9am–10pm daily)",
+  },
 };
 
 export const isSecureUrl = (url?: string): boolean => {

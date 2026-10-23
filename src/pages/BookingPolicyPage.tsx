@@ -38,23 +38,22 @@ export const BookingPolicyPage: React.FC<BookingPolicyPageProps> = ({ onNavigate
         <p>
           <strong>1. How to place an order.</strong> Choose the 100-sheet pack, and tick the optional upgrade if you want
           200 sheets. Click the buy button, enter your full name, email address and Malaysian phone number, then click Pay.
-          You are taken to toyyibPay's secure payment page to complete payment.
+          You are taken to Stripe's secure checkout page to complete payment.
         </p>
       </section>
 
       <section id="section-2" style={{ scrollMarginTop: '80px' }}>
         <p>
           <strong>2. When your order is created.</strong> Your order is created and given an order number (starting with
-          "SMV-") as soon as you click Pay. The amount is fixed at that moment and shown on the toyyibPay payment page. Please
+          "SMV-") as soon as you click Pay. The amount is fixed at that moment and shown on the Stripe checkout page. Please
           check the pack and amount before paying.
         </p>
       </section>
 
       <section id="section-3" style={{ scrollMarginTop: '80px' }}>
         <p>
-          <strong>3. Order confirmation.</strong> Your order is confirmed only after toyyibPay confirms that your payment was
-          successful and we have verified it. An unpaid order is not a confirmed booking, and we do not reserve prices for
-          unpaid orders.
+          <strong>3. Order confirmation.</strong> Your order is confirmed after Stripe confirms your payment and we verify it.
+          An unpaid order is not a confirmed booking, and we do not reserve prices for unpaid orders.
         </p>
       </section>
 
@@ -79,8 +78,9 @@ export const BookingPolicyPage: React.FC<BookingPolicyPageProps> = ({ onNavigate
         </p>
         <ul style={{ paddingLeft: '24px', margin: '12px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <li>After a successful payment, you are returned to our thank-you page, which shows a "Download your sheets" button.</li>
-          <li>toyyibPay also emails your receipt to the address you entered, including your download link.</li>
-          <li>Most FPX payments are confirmed within seconds. Some banks take longer, and the thank-you page will keep checking for a few minutes.</li>
+          <li>Our system also emails your confirmation and download link to the address you entered, and Stripe emails a payment receipt.</li>
+          <li>For DuitNow / Touch 'n Go QR payments, your download is unlocked on your order page after we verify your payment, {config.manualPayment.reviewTime}.</li>
+          <li>Most online payments are confirmed within seconds. Some bank payments take longer, and the thank-you page will keep checking for a few minutes.</li>
           <li>
             If you have not received your link within 24 hours of a successful payment, contact{' '}
             <PolicyValue value={business.email} isEmail /> with your order number, and we will send it manually.

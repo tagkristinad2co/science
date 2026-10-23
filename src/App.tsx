@@ -28,17 +28,48 @@ import { BookingPolicyPage } from './pages/BookingPolicyPage';
 import { PaymentPolicyPage } from './pages/PaymentPolicyPage';
 import { SecurityPolicyPage } from './pages/SecurityPolicyPage';
 
-type AppRoute = 'home' | 'thank-you' | 'terms' | 'booking-policy' | 'payment-policy' | 'security-policy';
+// Manual Payment & Admin Pages
+import { ManualOrderPage } from './pages/ManualOrderPage';
+import { AdminPage } from './pages/AdminPage';
+import { checkQrImages } from './utils/qrCheck';
 
-function getRouteFromLocation(): AppRoute {
+type AppRoute =
+  | 'home'
+  | 'thank-you'
+  | 'terms'
+  | 'booking-policy'
+  | 'payment-policy'
+  | 'security-policy'
+  | 'order'
+  | 'admin';
+
+interface RouteState {
+  route: AppRoute;
+  orderId?: string;
+  token?: string;
+}
+
+function getRouteFromLocation(): RouteState {
   const path = window.location.pathname.replace(/\/+$/, '');
+  const searchParams = new URLSearchParams(window.location.search);
+  const token = searchParams.get('t') || searchParams.get('token') || '';
+
+  if (path === '/admin') {
+    return { route: 'admin' };
+  }
+
+  if (path.startsWith('/order/')) {
+    const orderId = path.replace('/order/', '').trim();
+    return { route: 'order', orderId, token };
+  }
+
   const hash = window.location.hash.replace('#', '');
-  if (path === '/terms' || hash === 'terms') return 'terms';
-  if (path === '/booking-policy' || hash === 'booking-policy') return 'booking-policy';
-  if (path === '/payment-policy' || hash === 'payment-policy') return 'payment-policy';
-  if (path === '/security-policy' || hash === 'security-policy') return 'security-policy';
-  if (path.startsWith('/thank-you') || hash.startsWith('thank-you')) return 'thank-you';
-  return 'home';
+  if (path === '/terms' || hash === 'terms') return { route: 'terms' };
+  if (path === '/booking-policy' || hash === 'booking-policy') return { route: 'booking-policy' };
+  if (path === '/payment-policy' || hash === 'payment-policy') return { route: 'payment-policy' };
+  if (path === '/security-policy' || hash === 'security-policy') return { route: 'security-policy' };
+  if (path.startsWith('/thank-you') || hash.startsWith('thank-you')) return { route: 'thank-you' };
+  return { route: 'home' };
 }
 
 export const App: React.FC = () => {
@@ -50,6 +81,9 @@ export const App: React.FC = () => {
   // Dynamic payment methods from server
   const [allowsCards, setAllowsCards] = useState(false);
 
+  // QR availability check on load
+  const [qrAvailable, setQrAvailable] = useState(false);
+
   useEffect(() => {
     fetch('/api/payment-methods')
       .then((r) => r.json())
@@ -59,12 +93,19 @@ export const App: React.FC = () => {
         }
       })
       .catch((err) => console.warn('[App] Could not load payment methods:', err));
+
+    checkQrImages().then((res) => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const forced = urlParams.get('manual') === '1';
+      setQrAvailable(res.anyAvailable || forced);
+    });
   }, []);
 
   // View state / Routing
-  const [currentRoute, setCurrentRoute] = useState<AppRoute>(getRouteFromLocation);
+  const [routeState, setRouteState] = useState<RouteState>(getRouteFromLocation);
+  const currentRoute = routeState.route;
 
-  // toyyibPay checkout modal state
+  // Checkout modal state
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const [selectedPack, setSelectedPack] = useState<'100' | '200'>('100');
   const [checkoutDisplayPrice, setCheckoutDisplayPrice] = useState<string>('');
@@ -89,7 +130,7 @@ export const App: React.FC = () => {
     if (path.startsWith('/#')) {
       const hash = path.replace('/#', '');
       window.history.pushState(null, '', `/#${hash}`);
-      setCurrentRoute('home');
+      setRouteState({ route: 'home' });
       setTimeout(() => {
         const el = document.getElementById(hash);
         if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -99,18 +140,13 @@ export const App: React.FC = () => {
 
     if (path === '/') {
       window.history.pushState(null, '', '/');
-      setCurrentRoute('home');
+      setRouteState({ route: 'home' });
       window.scrollTo(0, 0);
       return;
     }
 
     window.history.pushState(null, '', path);
-    if (path === '/terms') setCurrentRoute('terms');
-    else if (path === '/booking-policy') setCurrentRoute('booking-policy');
-    else if (path === '/payment-policy') setCurrentRoute('payment-policy');
-    else if (path === '/security-policy') setCurrentRoute('security-policy');
-    else if (path === '/thank-you') setCurrentRoute('thank-you');
-    else setCurrentRoute('home');
+    setRouteState(getRouteFromLocation());
     window.scrollTo(0, 0);
   }, []);
 
@@ -121,10 +157,10 @@ export const App: React.FC = () => {
     }
 
     const handlePopState = () => {
-      const route = getRouteFromLocation();
-      setCurrentRoute(route);
+      const nextRouteState = getRouteFromLocation();
+      setRouteState(nextRouteState);
       const hash = window.location.hash.replace('#', '');
-      if (route === 'home' && hash && hash !== 'sample' && hash !== 'free-sample') {
+      if (nextRouteState.route === 'home' && hash && hash !== 'sample' && hash !== 'free-sample') {
         setTimeout(() => {
           const el = document.getElementById(hash);
           if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -142,6 +178,14 @@ export const App: React.FC = () => {
 
   // Sync document title and meta description
   useEffect(() => {
+    if (currentRoute === 'order') {
+      document.title = `Order #${routeState.orderId || ''} | Science Made Visual`;
+      return;
+    }
+    if (currentRoute === 'admin') {
+      document.title = 'Owner Admin | Science Made Visual';
+      return;
+    }
     if (currentRoute === 'thank-you') {
       document.title = 'Thank You | Science Made Visual';
       return;
@@ -178,7 +222,7 @@ export const App: React.FC = () => {
         'Discover 100 colourful illustrated science study sheets covering biology, chemistry, physics and Earth science. Printable PDF, instant download.'
       );
     }
-  }, [currentRoute]);
+  }, [currentRoute, routeState.orderId]);
 
   const handleScrollTo = (hash: string) => {
     if (currentRoute !== 'home') {
@@ -283,7 +327,15 @@ export const App: React.FC = () => {
   return (
     <div>
       {/* Route matching */}
-      {currentRoute === 'terms' ? (
+      {currentRoute === 'admin' ? (
+        <AdminPage onNavigate={handleNavigate} />
+      ) : currentRoute === 'order' ? (
+        <ManualOrderPage
+          orderId={routeState.orderId || ''}
+          token={routeState.token || ''}
+          onNavigate={handleNavigate}
+        />
+      ) : currentRoute === 'terms' ? (
         <TermsPage onNavigate={handleNavigate} onOpenPolicy={handleOpenPolicy} />
       ) : currentRoute === 'booking-policy' ? (
         <BookingPolicyPage onNavigate={handleNavigate} onOpenPolicy={handleOpenPolicy} />
@@ -412,6 +464,8 @@ export const App: React.FC = () => {
         pack={selectedPack}
         displayPrice={checkoutDisplayPrice}
         allowsCards={allowsCards}
+        qrAvailable={qrAvailable}
+        onNavigate={handleNavigate}
       />
 
       <PolicyModal
