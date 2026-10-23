@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { CountdownState } from '../hooks/useFoundingTimer';
 import { config } from '../config';
+import { trackAddToCart } from '../utils/metaPixel';
+import { calculatePrice } from '../../shared/pricing';
 
 interface PricingProps {
   onCheckout: (includeUpgrade: boolean) => void;
@@ -125,7 +127,14 @@ export const Pricing: React.FC<PricingProps> = ({
               <input
                 type="checkbox"
                 checked={includeUpgrade}
-                onChange={(e) => setIncludeUpgrade(e.target.checked)}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setIncludeUpgrade(checked);
+                  if (checked) {
+                    const price200Num = calculatePrice('200').amountCents / 100;
+                    trackAddToCart(price200Num);
+                  }
+                }}
                 style={{
                   marginTop: '3px',
                   width: '18px',

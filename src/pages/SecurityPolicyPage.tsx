@@ -75,6 +75,7 @@ export const SecurityPolicyPage: React.FC<SecurityPolicyPageProps> = ({ onNaviga
           reference number, and the order date. This is stored with our hosting provider, and only our server can access it.
           Receipts are only visible to the business owner. It is not visible to other visitors.
           If you buy, your first name and the first letter of your second name may appear in a 'recent purchase' notification on our website for up to 14 days (for example, 'Aisyah R. bought the 200-sheet pack'). We never show your full name, email or phone. Email <PolicyValue value={business.email} isEmail /> if you'd like yours hidden.
+          We use the Meta Pixel and Meta Conversions API to measure our Facebook and Instagram ads. This shares information such as pages viewed, purchase events and hashed (encrypted) contact details with Meta Platforms. Meta uses it under its own Data Policy. You can manage ad preferences in your Facebook settings.
         </p>
       </section>
 

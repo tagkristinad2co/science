@@ -22,6 +22,8 @@ import { CheckoutModal } from './components/CheckoutModal';
 import { ThankYouPage } from './components/ThankYouPage';
 import { Toast } from './components/Toast';
 import { SocialProofPopup } from './components/SocialProofPopup';
+import { initMetaPixel, trackPageView, trackViewContent } from './utils/metaPixel';
+import { calculatePrice } from '../shared/pricing';
 
 // Policy Pages
 import { TermsPage } from './pages/TermsPage';
@@ -100,11 +102,27 @@ export const App: React.FC = () => {
       const forced = urlParams.get('manual') === '1';
       setQrAvailable(res.anyAvailable || forced);
     });
+
+    // Initialize Meta Pixel on app start
+    initMetaPixel();
   }, []);
 
   // View state / Routing
   const [routeState, setRouteState] = useState<RouteState>(getRouteFromLocation);
   const currentRoute = routeState.route;
+
+  // Track PageView on SPA route changes (never twice for same URL)
+  useEffect(() => {
+    trackPageView();
+  }, [routeState]);
+
+  // Track ViewContent once per visit on sales landing page
+  useEffect(() => {
+    if (currentRoute === 'home') {
+      const price100Num = calculatePrice('100').amountCents / 100;
+      trackViewContent(price100Num);
+    }
+  }, [currentRoute]);
 
   // Checkout modal state
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);

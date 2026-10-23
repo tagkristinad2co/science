@@ -2,9 +2,11 @@ import type { Config, Context } from '@netlify/functions';
 import { NetlifyBlobsOrderStore } from '../../server-lib/order-store-blobs.ts';
 import { processManualCreate } from '../../server-lib/manual.ts';
 
+import { parseCookies } from '../../server-lib/admin-auth.ts';
+
 const store = new NetlifyBlobsOrderStore();
 
-export default async (req: Request, _context: Context): Promise<Response> => {
+export default async (req: Request, context: Context): Promise<Response> => {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
@@ -14,7 +16,18 @@ export default async (req: Request, _context: Context): Promise<Response> => {
 
   try {
     const body = await req.json();
-    const result = await processManualCreate(store, body);
+    const cookies = parseCookies(req.headers.get('cookie'));
+    const clientIp = context.ip || req.headers.get('x-forwarded-for') || undefined;
+    const userAgent = req.headers.get('user-agent') || undefined;
+
+    const metaInfo = {
+      fbp: body.fbp || cookies._fbp,
+      fbc: body.fbc || cookies._fbc,
+      clientIp,
+      userAgent,
+    };
+
+    const result = await processManualCreate(store, body, metaInfo);
     return new Response(JSON.stringify(result.body), {
       status: result.status,
       headers: { 'Content-Type': 'application/json' },

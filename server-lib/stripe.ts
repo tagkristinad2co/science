@@ -5,6 +5,7 @@ import { calculatePrice } from '../shared/pricing.ts';
 import { validateCheckoutInput, generateOrderId } from './validation.ts';
 import { getDownloadLink } from './downloads.ts';
 import { sendTelegramAlert, sendOrderApprovedEmail } from './notifications.ts';
+import { sendMetaCapiPurchase } from './meta-capi.ts';
 
 let stripeClient: Stripe | null = null;
 
@@ -24,7 +25,8 @@ export function getStripeClient(): Stripe {
 export async function processStripeCheckout(
   store: OrderStore,
   siteUrl: string,
-  body: any
+  body: any,
+  metaInfo?: { clientIp?: string; userAgent?: string; fbp?: string; fbc?: string }
 ): Promise<{ status: number; body: any }> {
   const validation = validateCheckoutInput(body);
   if (!validation.ok) {
@@ -58,6 +60,11 @@ export async function processStripeCheckout(
   const orderId = generateOrderId();
   const now = new Date().toISOString();
 
+  const fbp = metaInfo?.fbp || (typeof body?.fbp === 'string' ? body.fbp : undefined);
+  const fbc = metaInfo?.fbc || (typeof body?.fbc === 'string' ? body.fbc : undefined);
+  const clientIp = metaInfo?.clientIp || (typeof body?.clientIp === 'string' ? body.clientIp : undefined);
+  const userAgent = metaInfo?.userAgent || (typeof body?.userAgent === 'string' ? body.userAgent : undefined);
+
   // 3. Save order FIRST before creating Stripe session
   const newOrder: Order = {
     orderId,
@@ -69,6 +76,10 @@ export async function processStripeCheckout(
     method: 'stripe',
     status: 'pending',
     createdAt: now,
+    fbp,
+    fbc,
+    clientIp,
+    userAgent,
   };
 
   await store.create(newOrder);
@@ -215,6 +226,13 @@ export async function applyStripePaid(
   const amountRm = (order.amount / 100).toFixed(2);
   await sendTelegramAlert(
     `💳 Stripe sale: <b>${order.orderId}</b> · ${order.pack} sheets · RM${amountRm}`
+  );
+
+  // Send server-side Meta Conversions API purchase event
+  order.status = 'paid';
+  order.paidAt = now;
+  sendMetaCapiPurchase(store, order, siteUrl).catch((err) =>
+    console.warn('[Meta CAPI] Error in applyStripePaid:', err)
   );
 
   return true;

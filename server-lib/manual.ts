@@ -6,10 +6,12 @@ import { getDownloadLink } from './downloads.ts';
 import { detectFileType } from './magic-bytes.ts';
 import { constantTimeTokenCompare } from './admin-auth.ts';
 import { sendTelegramAlert, sendOrderApprovedEmail } from './notifications.ts';
+import { sendMetaCapiPurchase } from './meta-capi.ts';
 
 export async function processManualCreate(
   store: OrderStore,
-  body: any
+  body: any,
+  metaInfo?: { clientIp?: string; userAgent?: string; fbp?: string; fbc?: string }
 ): Promise<{ status: number; body: any }> {
   const validation = validateCheckoutInput(body);
   if (!validation.ok) {
@@ -33,6 +35,11 @@ export async function processManualCreate(
   const createdAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
+  const fbp = metaInfo?.fbp || (typeof body?.fbp === 'string' ? body.fbp : undefined);
+  const fbc = metaInfo?.fbc || (typeof body?.fbc === 'string' ? body.fbc : undefined);
+  const clientIp = metaInfo?.clientIp || (typeof body?.clientIp === 'string' ? body.clientIp : undefined);
+  const userAgent = metaInfo?.userAgent || (typeof body?.userAgent === 'string' ? body.userAgent : undefined);
+
   const newOrder: Order = {
     orderId,
     pack,
@@ -45,6 +52,10 @@ export async function processManualCreate(
     createdAt,
     expiresAt,
     accessToken,
+    fbp,
+    fbc,
+    clientIp,
+    userAgent,
   };
 
   try {
@@ -339,6 +350,11 @@ export async function processAdminAction(
       downloadUrl,
       orderPageUrl,
     }).catch(console.error);
+
+    // Send server-side Meta Conversions API purchase event
+    sendMetaCapiPurchase(store, { ...order, status: 'paid', paidAt: now }, siteUrl).catch(
+      (err) => console.warn('[Meta CAPI] Error in processAdminAction approve:', err)
+    );
 
     return {
       status: 200,

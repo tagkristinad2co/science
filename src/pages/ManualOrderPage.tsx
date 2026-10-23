@@ -3,6 +3,8 @@ import { config } from '../config';
 import { compressReceiptFile } from '../utils/imageCompressor';
 import { PolicyValue } from '../components/PolicyValue';
 import { checkQrImages, QrAvailability } from '../utils/qrCheck';
+import { trackPurchase } from '../utils/metaPixel';
+import { calculatePrice } from '../../shared/pricing';
 
 interface ManualOrderPageProps {
   orderId: string;
@@ -115,6 +117,17 @@ export const ManualOrderPage: React.FC<ManualOrderPageProps> = ({ orderId, token
 
     return () => clearInterval(interval);
   }, [order?.status, orderId, token]);
+
+  // Fire Purchase event once when confirmed paid
+  useEffect(() => {
+    if (order?.status === 'paid' && order.orderId && order.pack) {
+      const amountInRm =
+        typeof order.amount === 'number'
+          ? order.amount / 100
+          : calculatePrice(order.pack).amountCents / 100;
+      trackPurchase(order.orderId, order.pack, amountInRm);
+    }
+  }, [order?.status, order?.orderId, order?.pack, order?.amount]);
 
   const handleCopy = (text: string, type: 'order' | 'link') => {
     navigator.clipboard.writeText(text);

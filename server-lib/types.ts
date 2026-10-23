@@ -22,6 +22,13 @@ export interface Order {
   emailSentAt?: string;
   hideFromSocialProof?: boolean;
 
+  // Meta Pixel & Conversions API fields
+  fbp?: string;
+  fbc?: string;
+  clientIp?: string;
+  userAgent?: string;
+  capiSentAt?: string;
+
   // Stripe fields
   stripeSessionId?: string;
   stripePaymentIntentId?: string;

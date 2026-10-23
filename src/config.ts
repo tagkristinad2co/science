@@ -30,6 +30,10 @@ export interface SocialProofConfig {
   minSalesToShow: number;
 }
 
+export interface MetaConfig {
+  pixelId: string;
+}
+
 export interface SMVConfig {
   foundingEndsAt: string;
   founding: PricingTier;
@@ -45,6 +49,7 @@ export interface SMVConfig {
   manualPayment: ManualPaymentConfig;
   onlinePaymentLabel: string;
   socialProof: SocialProofConfig;
+  meta: MetaConfig;
 }
 
 export const config: SMVConfig = {
@@ -52,6 +57,9 @@ export const config: SMVConfig = {
   founding: PRICING_CONFIG.founding,
   official: PRICING_CONFIG.official,
   onlinePaymentLabel: "Card & FPX online banking",
+  meta: {
+    pixelId: "2122791698316257",
+  },
   socialProof: {
     enabled: true,
     startFrom: "2026-10-23T00:00:00+08:00", // ignore orders paid before this (e.g. my test purchases). I'll update it after testing.

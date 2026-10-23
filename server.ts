@@ -100,7 +100,16 @@ app.get('/api/recent-sales', async (_req: Request, res: Response): Promise<void>
 // 1. POST /api/checkout (Stripe Checkout)
 app.post('/api/checkout', checkoutLimiter, async (req: Request, res: Response): Promise<void> => {
   const siteUrl = getSiteUrl(req);
-  const result = await processStripeCheckout(devStore, siteUrl, req.body);
+  const cookies = parseCookies(req.headers.cookie);
+  const clientIp = req.ip || req.socket.remoteAddress || undefined;
+  const userAgent = req.headers['user-agent'] as string | undefined;
+  const metaInfo = {
+    fbp: req.body?.fbp || cookies._fbp,
+    fbc: req.body?.fbc || cookies._fbc,
+    clientIp,
+    userAgent,
+  };
+  const result = await processStripeCheckout(devStore, siteUrl, req.body, metaInfo);
   res.status(result.status).json(result.body);
 });
 
@@ -125,7 +134,16 @@ app.get('/api/order-status', async (req: Request, res: Response): Promise<void> 
 
 // 4. POST /api/manual/create
 app.post('/api/manual/create', checkoutLimiter, async (req: Request, res: Response): Promise<void> => {
-  const result = await processManualCreate(devStore, req.body);
+  const cookies = parseCookies(req.headers.cookie);
+  const clientIp = req.ip || req.socket.remoteAddress || undefined;
+  const userAgent = req.headers['user-agent'] as string | undefined;
+  const metaInfo = {
+    fbp: req.body?.fbp || cookies._fbp,
+    fbc: req.body?.fbc || cookies._fbc,
+    clientIp,
+    userAgent,
+  };
+  const result = await processManualCreate(devStore, req.body, metaInfo);
   res.status(result.status).json(result.body);
 });
 

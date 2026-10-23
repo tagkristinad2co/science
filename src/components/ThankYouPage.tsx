@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { trackPurchase } from '../utils/metaPixel';
+import { calculatePrice } from '../../shared/pricing';
 
 interface ThankYouPageProps {
   onBackToHome: () => void;
@@ -8,6 +10,7 @@ interface OrderStatusResponse {
   status: 'paid' | 'pending' | 'failed';
   orderId?: string;
   pack?: '100' | '200';
+  amount?: number;
   downloadUrl?: string;
   downloadLink?: string;
   email?: string;
@@ -74,6 +77,17 @@ export const ThankYouPage: React.FC<ThankYouPageProps> = ({ onBackToHome }) => {
       if (intervalId) clearInterval(intervalId);
     };
   }, [orderId, sessionId]);
+
+  // Fire Purchase event once when confirmed paid
+  useEffect(() => {
+    if (orderData?.status === 'paid' && orderData.orderId && orderData.pack) {
+      const amountInRm =
+        typeof orderData.amount === 'number'
+          ? orderData.amount / 100
+          : calculatePrice(orderData.pack).amountCents / 100;
+      trackPurchase(orderData.orderId, orderData.pack, amountInRm);
+    }
+  }, [orderData]);
 
   const downloadLink = orderData?.downloadLink || orderData?.downloadUrl;
 

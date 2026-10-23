@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { isValidEmail, isValidMalaysianPhone, config } from '../config';
+import { trackInitiateCheckout, trackAddPaymentInfo, getMetaCookies } from '../utils/metaPixel';
+import { calculatePrice } from '../../shared/pricing';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -37,10 +39,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     if (isOpen) {
       setError(null);
       setPaymentMethod('online');
+      const val = calculatePrice(pack).amountCents / 100;
+      trackInitiateCheckout(pack, val);
       const timer = setTimeout(() => nameInputRef.current?.focus(), 50);
       return () => clearTimeout(timer);
     }
-  }, [isOpen]);
+  }, [isOpen, pack]);
 
   // 2. Escape key and body scroll lock: independent of onClose reference
   useEffect(() => {
@@ -86,6 +90,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     setLoading(true);
 
+    const packPriceNum = calculatePrice(pack).amountCents / 100;
+    const pmType = paymentMethod === 'manual' ? 'manual_qr' : 'stripe';
+    trackAddPaymentInfo(pack, packPriceNum, pmType);
+
+    const { fbp, fbc } = getMetaCookies();
+
     if (paymentMethod === 'manual') {
       try {
         const res = await fetch('/api/manual/create', {
@@ -96,6 +106,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             name: cleanName,
             email: cleanEmail,
             phone: cleanPhone,
+            fbp,
+            fbc,
           }),
         });
 
@@ -129,6 +141,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           name: cleanName,
           email: cleanEmail,
           phone: cleanPhone,
+          fbp,
+          fbc,
         }),
       });
 
