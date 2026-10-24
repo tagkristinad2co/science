@@ -311,18 +311,47 @@ export async function processAdminListOrders(
   };
 }
 
+export function normalizePaymentRef(ref: string): string {
+  return ref.toUpperCase().replace(/[\s-]/g, '');
+}
+
+export function validatePaymentRef(ref: unknown): {
+  valid: boolean;
+  normalized: string;
+  trimmed: string;
+  error?: string;
+} {
+  if (typeof ref !== 'string') {
+    return { valid: false, normalized: '', trimmed: '', error: 'Payment reference number is required.' };
+  }
+  const trimmed = ref.trim();
+  const normalized = normalizePaymentRef(trimmed);
+  // Letters and numbers only, 6 to 64 chars
+  if (!/^[A-Z0-9]{6,64}$/.test(normalized)) {
+    return {
+      valid: false,
+      normalized,
+      trimmed,
+      error: 'Payment reference must be 6 to 64 letters and numbers.',
+    };
+  }
+  return { valid: true, normalized, trimmed };
+}
+
 export async function processAdminAction(
   store: OrderStore,
   siteUrl: string,
   body: {
     orderId: string;
-    action: 'approve' | 'reject' | 'toggle_social_proof' | 'resend_email';
+    action: 'approve' | 'reject' | 'toggle_social_proof' | 'resend_email' | 'update_payment_ref';
     reason?: string;
     adminUser?: string;
     hideFromSocialProof?: boolean;
+    paymentRefNo?: string;
+    forceDuplicate?: boolean;
   }
 ): Promise<{ status: number; body: any }> {
-  const { orderId, action, reason, adminUser, hideFromSocialProof } = body;
+  const { orderId, action, reason, adminUser, hideFromSocialProof, paymentRefNo, forceDuplicate } = body;
   if (!orderId || !action) {
     return { status: 400, body: { error: 'Missing orderId or action' } };
   }
@@ -408,6 +437,58 @@ export async function processAdminAction(
     return { status: 400, body: { error: 'No email can be resent for this order in its current status' } };
   }
 
+  if (action === 'update_payment_ref') {
+    if (order.method !== 'manual') {
+      return { status: 400, body: { error: 'Payment reference can only be recorded for manual orders.' } };
+    }
+
+    const validation = validatePaymentRef(paymentRefNo);
+    if (!validation.valid) {
+      return { status: 400, body: { error: validation.error || 'A valid payment reference number is required.' } };
+    }
+
+    const { normalized, trimmed } = validation;
+
+    const allOrders = await store.list();
+    const duplicate = allOrders.find(
+      (o) => o.paymentRefNormalized === normalized && o.orderId !== order.orderId
+    );
+
+    if (duplicate && !forceDuplicate) {
+      return {
+        status: 409,
+        body: {
+          error: `This reference number was already used for order ${duplicate.orderId}. The same payment can't be used twice.`,
+          duplicateOrderId: duplicate.orderId,
+        },
+      };
+    }
+
+    const now = new Date().toISOString();
+    const oldRef = order.paymentRefNo || '(none)';
+
+    await store.update(order.orderId, {
+      paymentRefNo: trimmed,
+      paymentRefNormalized: normalized,
+      paymentRefEditedAt: now,
+      ...(order.paymentRefRecordedAt ? {} : { paymentRefRecordedAt: now }),
+    });
+
+    console.log(
+      `[ADMIN AUDIT] Order ${order.orderId} paymentRefNo updated from "${oldRef}" to "${trimmed}" (${normalized}) by ${adminUser || 'admin'} at ${now}${duplicate ? ` [FORCED DUPLICATE of order ${duplicate.orderId}]` : ''}`
+    );
+
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        paymentRefNo: trimmed,
+        paymentRefNormalized: normalized,
+        paymentRefEditedAt: now,
+      },
+    };
+  }
+
   // Prevent approving FPX/Stripe orders through manual review flow
   if (order.method !== 'manual') {
     return { status: 400, body: { error: 'Cannot approve non-manual order from manual review' } };
@@ -418,15 +499,40 @@ export async function processAdminAction(
       return { status: 200, body: { ok: true, status: 'paid', message: 'Already paid' } };
     }
 
+    const validation = validatePaymentRef(paymentRefNo);
+    if (!validation.valid) {
+      return { status: 400, body: { error: validation.error || 'A valid payment reference number is required.' } };
+    }
+
+    const { normalized, trimmed } = validation;
+
+    const allOrders = await store.list();
+    const duplicate = allOrders.find(
+      (o) => o.paymentRefNormalized === normalized && o.orderId !== order.orderId
+    );
+
+    if (duplicate && !forceDuplicate) {
+      return {
+        status: 409,
+        body: {
+          error: `This reference number was already used for order ${duplicate.orderId}. The same payment can't be used twice.`,
+          duplicateOrderId: duplicate.orderId,
+        },
+      };
+    }
+
     const now = new Date().toISOString();
     await store.update(order.orderId, {
       status: 'paid',
       paidAt: now,
       approvedAt: now,
+      paymentRefNo: trimmed,
+      paymentRefNormalized: normalized,
+      paymentRefRecordedAt: now,
     });
 
     console.log(
-      `[ADMIN AUDIT] Order ${order.orderId} APPROVED by ${adminUser || 'admin'} at ${now}`
+      `[ADMIN AUDIT] Order ${order.orderId} APPROVED by ${adminUser || 'admin'} at ${now} with paymentRefNo: "${trimmed}" (${normalized})${duplicate ? ` [FORCED DUPLICATE of order ${duplicate.orderId}]` : ''}`
     );
 
     const downloadUrl = getDownloadLink(order.pack) || '';

@@ -260,6 +260,8 @@ app.post('/api/admin/action', requireAdminAuth, async (req: Request, res: Respon
     action: req.body.action,
     reason: req.body.reason,
     hideFromSocialProof: req.body.hideFromSocialProof,
+    paymentRefNo: req.body.paymentRefNo,
+    forceDuplicate: req.body.forceDuplicate,
     adminUser: 'owner',
   });
   res.status(result.status).json(result.body);

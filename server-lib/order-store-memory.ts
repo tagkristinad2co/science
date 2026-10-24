@@ -32,12 +32,17 @@ export class InMemoryOrderStore implements OrderStore {
 
     if (options?.search) {
       const q = options.search.trim().toLowerCase();
+      const qNorm = q.toUpperCase().replace(/[\s-]/g, '');
       all = all.filter(
         (o) =>
           o.orderId.toLowerCase().includes(q) ||
           o.name.toLowerCase().includes(q) ||
           o.email.toLowerCase().includes(q) ||
-          o.phone.toLowerCase().includes(q)
+          o.phone.toLowerCase().includes(q) ||
+          (o.paymentRefNo && o.paymentRefNo.toLowerCase().includes(q)) ||
+          (o.paymentRefNormalized && qNorm && o.paymentRefNormalized.includes(qNorm)) ||
+          (o.stripePaymentIntentId && o.stripePaymentIntentId.toLowerCase().includes(q)) ||
+          (o.customerReference && o.customerReference.toLowerCase().includes(q))
       );
     }
 

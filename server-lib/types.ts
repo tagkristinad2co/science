@@ -51,6 +51,12 @@ export interface Order {
   receiptUploadedAt?: string;
   approvedAt?: string;
   rejectReason?: string;
+
+  // Owner payment reference fields (from DuitNow/TnG)
+  paymentRefNo?: string;
+  paymentRefRecordedAt?: string;
+  paymentRefNormalized?: string;
+  paymentRefEditedAt?: string;
 }
 
 export interface OrderStore {

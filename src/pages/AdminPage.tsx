@@ -24,6 +24,11 @@ interface OrderItem {
   emailSentAt?: string;
   pendingEmailSentAt?: string;
   rejectionEmailSentAt?: string;
+  paymentRefNo?: string;
+  paymentRefRecordedAt?: string;
+  paymentRefNormalized?: string;
+  paymentRefEditedAt?: string;
+  stripePaymentIntentId?: string;
 }
 
 export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ onNavigate }) => {
@@ -46,6 +51,16 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
 
   // Receipt modal viewer
   const [viewingReceiptOrder, setViewingReceiptOrder] = useState<OrderItem | null>(null);
+
+  // Payment ref inputs for "To review" cards
+  const [paymentRefInputs, setPaymentRefInputs] = useState<Record<string, string>>({});
+  const [duplicateErrors, setDuplicateErrors] = useState<Record<string, { duplicateOrderId: string; message: string } | null>>({});
+
+  // Inline edit state for paymentRefNo (All orders table & cards)
+  const [editingOrderRefId, setEditingOrderRefId] = useState<string | null>(null);
+  const [editingRefValue, setEditingRefValue] = useState('');
+  const [editDuplicateError, setEditDuplicateError] = useState<{ duplicateOrderId: string; message: string } | null>(null);
+  const [savingRefEdit, setSavingRefEdit] = useState(false);
 
   // Check login status on mount
   useEffect(() => {
@@ -104,8 +119,20 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
     }
   };
 
-  const handleApprove = async (order: OrderItem) => {
-    if (!confirm(`Are you sure you want to APPROVE order ${order.orderId} (RM${(order.amount / 100).toFixed(2)})?\n\nPlease confirm you have checked your banking/TnG app and the money has really arrived.`)) {
+  const isValidPaymentRef = (val: string | undefined): boolean => {
+    if (!val) return false;
+    const norm = val.toUpperCase().replace(/[\s-]/g, '');
+    return /^[A-Z0-9]{6,64}$/.test(norm);
+  };
+
+  const handleApprove = async (order: OrderItem, forceDuplicate = false) => {
+    const refVal = (paymentRefInputs[order.orderId] ?? (order.paymentRefNo || '')).trim();
+    if (!isValidPaymentRef(refVal)) {
+      alert('Please enter a valid payment reference number (at least 6 alphanumeric characters).');
+      return;
+    }
+
+    if (!forceDuplicate && !confirm(`Are you sure you want to APPROVE order ${order.orderId} (RM${(order.amount / 100).toFixed(2)})?\n\nPayment Ref: ${refVal}\n\nPlease confirm you have checked your banking/TnG app and the money has really arrived.`)) {
       return;
     }
 
@@ -117,14 +144,34 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
         body: JSON.stringify({
           orderId: order.orderId,
           action: 'approve',
+          paymentRefNo: refVal,
+          forceDuplicate,
         }),
       });
 
       const data = await res.json();
+      if (res.status === 409) {
+        setDuplicateErrors((prev) => ({
+          ...prev,
+          [order.orderId]: {
+            duplicateOrderId: data.duplicateOrderId || '',
+            message: data.error || 'This reference number was already used for another order.',
+          },
+        }));
+        return;
+      }
+
       if (!res.ok) {
         alert(data.error || 'Approval failed');
         return;
       }
+
+      setDuplicateErrors((prev) => ({ ...prev, [order.orderId]: null }));
+      setPaymentRefInputs((prev) => {
+        const next = { ...prev };
+        delete next[order.orderId];
+        return next;
+      });
 
       fetchOrders(tab, search);
     } catch (err) {
@@ -133,6 +180,125 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
     } finally {
       setProcessingAction(null);
     }
+  };
+
+  const handleSavePaymentRef = async (orderId: string, forceDuplicate = false) => {
+    const refVal = editingRefValue.trim();
+    if (!isValidPaymentRef(refVal)) {
+      alert('Please enter a valid payment reference number (at least 6 alphanumeric characters).');
+      return;
+    }
+
+    setSavingRefEdit(true);
+    try {
+      const res = await fetch('/api/admin/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId,
+          action: 'update_payment_ref',
+          paymentRefNo: refVal,
+          forceDuplicate,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.status === 409) {
+        setEditDuplicateError({
+          duplicateOrderId: data.duplicateOrderId || '',
+          message: data.error || 'This reference number was already used for another order.',
+        });
+        return;
+      }
+
+      if (!res.ok) {
+        alert(data.error || 'Failed to update payment reference number');
+        return;
+      }
+
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.orderId === orderId
+            ? {
+                ...o,
+                paymentRefNo: data.paymentRefNo,
+                paymentRefNormalized: data.paymentRefNormalized,
+                paymentRefEditedAt: data.paymentRefEditedAt,
+              }
+            : o
+        )
+      );
+
+      setEditingOrderRefId(null);
+      setEditDuplicateError(null);
+    } catch (err) {
+      console.error('[Update ref error]', err);
+      alert('Failed to update payment reference number');
+    } finally {
+      setSavingRefEdit(false);
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (orders.length === 0) {
+      alert('No orders to export.');
+      return;
+    }
+
+    const headers = [
+      'Order ID',
+      'Date',
+      'Method',
+      'Pack',
+      'Amount (RM)',
+      'Status',
+      'Customer Name',
+      'Email',
+      'Phone',
+      'Customer Reference',
+      'Payment Ref No.',
+      'Paid/Approved Date',
+    ];
+
+    const escapeCsv = (val: any) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val);
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
+    const rows = orders.map((o) => {
+      const refNo = o.method === 'stripe'
+        ? (o.stripePaymentIntentId || '')
+        : (o.paymentRefNo || '');
+      const paidDate = o.paidAt || o.approvedAt || '';
+
+      return [
+        escapeCsv(o.orderId),
+        escapeCsv(new Date(o.createdAt).toLocaleString('en-MY')),
+        escapeCsv(o.method || 'fpx'),
+        escapeCsv(`${o.pack} sheets`),
+        escapeCsv((o.amount / 100).toFixed(2)),
+        escapeCsv(o.status),
+        escapeCsv(o.name),
+        escapeCsv(o.email),
+        escapeCsv(o.phone),
+        escapeCsv(o.customerReference || ''),
+        escapeCsv(refNo),
+        escapeCsv(paidDate ? new Date(paidDate).toLocaleString('en-MY') : ''),
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    link.download = `orders_${tab}_${dateStr}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleConfirmReject = async () => {
@@ -431,11 +597,11 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
             </button>
           </div>
 
-          {/* Search box */}
-          <div style={{ display: 'flex', gap: '8px' }}>
+          {/* Search box & CSV Export */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <input
               type="text"
-              placeholder="Search order #, name, email, phone…"
+              placeholder="Search order #, ref no., name, email…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => {
@@ -465,6 +631,27 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
             >
               Search
             </button>
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                color: 'var(--navy)',
+                fontWeight: 700,
+                fontSize: '13px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+              }}
+              title="Export current orders to CSV"
+            >
+              📥 Export CSV
+            </button>
           </div>
         </div>
 
@@ -481,6 +668,281 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
             <div style={{ fontWeight: 800, fontSize: '16px', color: 'var(--navy)' }}>
               {tab === 'to_review' ? 'No orders waiting for review!' : 'No orders found.'}
             </div>
+          </div>
+        ) : tab === 'all' ? (
+          <div style={{ overflowX: 'auto', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 10px rgba(16, 29, 61, 0.04)' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <th style={{ padding: '14px 16px', fontWeight: 800 }}>Order #</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 800 }}>Date</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 800 }}>Customer</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 800 }}>Method / Pack</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 800 }}>Amount</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 800 }}>Status</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 800 }}>Payment ref no.</th>
+                  <th style={{ padding: '14px 16px', fontWeight: 800 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((o) => {
+                  const amountStr = `RM${(o.amount / 100).toFixed(2)}`;
+                  const orderPageUrl = `${window.location.origin}/order/${o.orderId}?t=${o.accessToken || ''}`;
+                  const cleanPhone = formatCleanPhone(o.phone);
+                  const isStripe = o.method === 'stripe';
+                  const isManual = o.method === 'manual';
+                  const isEditingRef = editingOrderRefId === o.orderId;
+                  const waTextApproved = encodeURIComponent(
+                    `Hi ${o.name}, your payment for order ${o.orderId} is confirmed! Download your science sheets here: ${orderPageUrl}. Thank you!`
+                  );
+
+                  return (
+                    <tr key={o.orderId} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 800, color: 'var(--navy)' }}>
+                          {o.orderId}
+                        </span>
+                      </td>
+                      <td style={{ padding: '14px 16px', verticalAlign: 'top', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                        {new Date(o.createdAt).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        <div style={{ fontSize: '11px' }}>{new Date(o.createdAt).toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit' })}</div>
+                      </td>
+                      <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--navy)' }}>{o.name}</div>
+                        <div style={{ fontSize: '12px', color: '#64748b' }}>
+                          <a href={`mailto:${o.email}`} style={{ color: '#64748b', textDecoration: 'none' }}>
+                            {o.email}
+                          </a>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#64748b' }}>{o.phone}</div>
+                        {o.customerReference && (
+                          <div style={{ fontSize: '11px', color: '#475569', marginTop: '2px' }}>
+                            Cust ref: <span style={{ fontFamily: 'monospace', fontWeight: 700, background: '#f1f5f9', padding: '1px 4px', borderRadius: '4px' }}>{o.customerReference}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--navy)' }}>
+                          {isManual ? '📱 QR Manual' : isStripe ? '💳 Stripe' : 'toyyibPay'}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#64748b' }}>{o.pack} sheets</div>
+                      </td>
+                      <td style={{ padding: '14px 16px', verticalAlign: 'top', fontWeight: 800, color: 'var(--navy)' }}>
+                        {amountStr}
+                      </td>
+                      <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            textTransform: 'uppercase',
+                            display: 'inline-block',
+                            background:
+                              o.status === 'paid'
+                                ? '#dcfce7'
+                                : o.status === 'under_review'
+                                ? '#fef3c7'
+                                : o.status === 'rejected'
+                                ? '#fee2e2'
+                                : '#f1f5f9',
+                            color:
+                              o.status === 'paid'
+                                ? '#15803d'
+                                : o.status === 'under_review'
+                                ? '#b45309'
+                                : o.status === 'rejected'
+                                ? '#b91c1c'
+                                : '#475569',
+                          }}
+                        >
+                          {o.status.replace('_', ' ')}
+                        </span>
+                        {o.status === 'paid' && o.hideFromSocialProof && (
+                          <div style={{ marginTop: '4px' }}>
+                            <span style={{ fontSize: '10px', background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                              Hidden popup
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>
+                        {isEditingRef ? (
+                          <div style={{ minWidth: '220px' }}>
+                            <input
+                              type="text"
+                              value={editingRefValue}
+                              onChange={(e) => {
+                                setEditingRefValue(e.target.value);
+                                if (editDuplicateError) setEditDuplicateError(null);
+                              }}
+                              placeholder="e.g. 20261025MBBE..."
+                              style={{
+                                width: '100%',
+                                padding: '6px 8px',
+                                borderRadius: '6px',
+                                border: editDuplicateError ? '2px solid #ef4444' : '1px solid #cbd5e1',
+                                fontSize: '12px',
+                                fontFamily: 'monospace',
+                                fontWeight: 700,
+                                marginBottom: '6px',
+                                boxSizing: 'border-box',
+                              }}
+                            />
+                            {editDuplicateError && (
+                              <div style={{ fontSize: '11px', color: '#991b1b', background: '#fee2e2', padding: '6px 8px', borderRadius: '4px', marginBottom: '6px' }}>
+                                ⚠ Already used for order <strong>#{editDuplicateError.duplicateOrderId}</strong>.
+                                <button
+                                  type="button"
+                                  onClick={() => handleSavePaymentRef(o.orderId, true)}
+                                  style={{ background: 'none', border: 'none', color: '#b91c1c', fontWeight: 800, textDecoration: 'underline', cursor: 'pointer', marginLeft: '4px' }}
+                                >
+                                  Save anyway
+                                </button>
+                              </div>
+                            )}
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button
+                                type="button"
+                                disabled={savingRefEdit || !isValidPaymentRef(editingRefValue.trim())}
+                                onClick={() => handleSavePaymentRef(o.orderId, false)}
+                                style={{
+                                  padding: '4px 10px',
+                                  background: '#22c55e',
+                                  color: '#fff',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  fontWeight: 800,
+                                  cursor: savingRefEdit || !isValidPaymentRef(editingRefValue.trim()) ? 'not-allowed' : 'pointer',
+                                  opacity: savingRefEdit || !isValidPaymentRef(editingRefValue.trim()) ? 0.5 : 1,
+                                }}
+                              >
+                                {savingRefEdit ? 'Saving…' : 'Save'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingOrderRefId(null);
+                                  setEditDuplicateError(null);
+                                }}
+                                style={{
+                                  padding: '4px 8px',
+                                  background: '#f1f5f9',
+                                  border: '1px solid #cbd5e1',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            {isStripe ? (
+                              o.stripePaymentIntentId ? (
+                                <span
+                                  style={{ fontFamily: 'monospace', fontSize: '12px', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#334155' }}
+                                  title={o.stripePaymentIntentId}
+                                >
+                                  {o.stripePaymentIntentId.length > 14
+                                    ? `${o.stripePaymentIntentId.slice(0, 5)}…${o.stripePaymentIntentId.slice(-4)}`
+                                    : o.stripePaymentIntentId}
+                                </span>
+                              ) : (
+                                <span style={{ color: '#94a3b8' }}>—</span>
+                              )
+                            ) : isManual ? (
+                              <>
+                                {o.paymentRefNo ? (
+                                  <span style={{ fontFamily: 'monospace', fontSize: '12px', fontWeight: 700, color: 'var(--navy)', background: '#e0e7ff', padding: '2px 6px', borderRadius: '4px' }}>
+                                    {o.paymentRefNo}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#94a3b8' }}>—</span>
+                                )}
+                                {o.status === 'paid' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingOrderRefId(o.orderId);
+                                      setEditingRefValue(o.paymentRefNo || '');
+                                      setEditDuplicateError(null);
+                                    }}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      padding: '2px 4px',
+                                      fontSize: '12px',
+                                      borderRadius: '4px',
+                                    }}
+                                    title="Edit payment reference number"
+                                  >
+                                    ✏️
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              <span style={{ color: '#94a3b8' }}>—</span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '14px 16px', verticalAlign: 'top' }}>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                          {o.receiptKey && (
+                            <button
+                              type="button"
+                              onClick={() => setViewingReceiptOrder(o)}
+                              style={{ padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '11px', fontWeight: 700, cursor: 'pointer', color: 'var(--navy)' }}
+                              title="View Receipt"
+                            >
+                              👁 Receipt
+                            </button>
+                          )}
+                          {o.accessToken && (
+                            <a
+                              href={orderPageUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ padding: '4px 8px', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '11px', fontWeight: 700, color: 'var(--purple)', textDecoration: 'none' }}
+                              title="Customer Order Page"
+                            >
+                              Page ↗
+                            </a>
+                          )}
+                          {o.status === 'paid' && (
+                            <button
+                              type="button"
+                              disabled={processingAction === o.orderId}
+                              onClick={() => handleToggleHideSocialProof(o)}
+                              style={{ padding: '4px 8px', background: o.hideFromSocialProof ? '#fff1f2' : '#f8fafc', border: o.hideFromSocialProof ? '1px solid #fecdd3' : '1px solid #cbd5e1', borderRadius: '6px', fontSize: '11px', fontWeight: 700, color: o.hideFromSocialProof ? '#e11d48' : '#475569', cursor: 'pointer' }}
+                              title="Toggle hide from recent purchases popup"
+                            >
+                              {o.hideFromSocialProof ? '🙈 Hidden' : '👁 Shown'}
+                            </button>
+                          )}
+                          {o.status === 'paid' && (
+                            <a
+                              href={`https://wa.me/${cleanPhone}?text=${waTextApproved}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ padding: '4px 8px', background: '#25d366', color: '#ffffff', borderRadius: '6px', fontSize: '11px', fontWeight: 700, textDecoration: 'none' }}
+                            >
+                              💬 WhatsApp
+                            </a>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -634,6 +1096,36 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
                         <div style={{ fontFamily: 'monospace', fontWeight: 700 }}>{o.customerReference}</div>
                       </div>
                     )}
+                    {o.paymentRefNo && (
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: '11px', fontWeight: 700 }}>PAYMENT REF NO.</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--navy)' }}>{o.paymentRefNo}</span>
+                          {o.method === 'manual' && o.status === 'paid' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingOrderRefId(o.orderId);
+                                setEditingRefValue(o.paymentRefNo || '');
+                                setEditDuplicateError(null);
+                              }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: '12px' }}
+                              title="Edit payment reference number"
+                            >
+                              ✏️
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {o.method === 'stripe' && o.stripePaymentIntentId && (
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: '11px', fontWeight: 700 }}>STRIPE INTENT</div>
+                        <div style={{ fontFamily: 'monospace', fontWeight: 700, color: '#475569', fontSize: '12px' }}>
+                          {o.stripePaymentIntentId}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Rejection reason if rejected */}
@@ -705,6 +1197,146 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
                       </button>
                     )}
                   </div>
+
+                  {/* Payment reference input for manual review */}
+                  {o.method === 'manual' && o.status !== 'paid' && (
+                    <div
+                      style={{
+                        background: '#f8fafc',
+                        border: duplicateErrors[o.orderId] ? '2px solid #ef4444' : '1px solid #cbd5e1',
+                        borderRadius: '10px',
+                        padding: '12px 14px',
+                        marginBottom: '14px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '8px' }}>
+                        <label style={{ fontSize: '12px', fontWeight: 800, color: 'var(--navy)' }}>
+                          Payment reference no. <span style={{ fontWeight: 400, color: '#64748b' }}>(from your DuitNow / TnG app)</span>
+                        </label>
+                        {o.customerReference && (
+                          <div style={{ fontSize: '12px', color: '#475569' }}>
+                            <span style={{ color: '#64748b' }}>Customer entered: </span>
+                            <strong style={{ fontFamily: 'monospace', color: 'var(--navy)', background: '#e2e8f0', padding: '1px 6px', borderRadius: '4px' }}>
+                              {o.customerReference}
+                            </strong>
+                          </div>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="e.g. 20261025MBBEMYKL040OQR12345678"
+                        value={paymentRefInputs[o.orderId] ?? (o.paymentRefNo || '')}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPaymentRefInputs((prev) => ({ ...prev, [o.orderId]: val }));
+                          if (duplicateErrors[o.orderId]) {
+                            setDuplicateErrors((prev) => ({ ...prev, [o.orderId]: null }));
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          borderRadius: '8px',
+                          border: duplicateErrors[o.orderId] ? '1px solid #ef4444' : '1px solid #cbd5e1',
+                          fontSize: '13px',
+                          fontFamily: 'monospace',
+                          fontWeight: 700,
+                          background: '#ffffff',
+                          color: 'var(--navy)',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                      {duplicateErrors[o.orderId] && (
+                        <div
+                          style={{
+                            marginTop: '8px',
+                            padding: '8px 12px',
+                            background: '#fee2e2',
+                            border: '1px solid #fca5a5',
+                            borderRadius: '6px',
+                            color: '#991b1b',
+                            fontSize: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: '8px',
+                          }}
+                        >
+                          <span>
+                            ⚠ This reference number was already used for order <strong>{duplicateErrors[o.orderId]!.duplicateOrderId}</strong>. The same payment can't be used twice.
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleApprove(o, true)}
+                            disabled={processingAction === o.orderId}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#b91c1c',
+                              textDecoration: 'underline',
+                              fontWeight: 800,
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                              padding: '2px 4px',
+                            }}
+                          >
+                            Approve anyway
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Inline edit paymentRefNo for paid manual orders */}
+                  {editingOrderRefId === o.orderId && (
+                    <div style={{ background: '#f8fafc', border: editDuplicateError ? '2px solid #ef4444' : '1px solid #cbd5e1', borderRadius: '10px', padding: '12px 14px', marginBottom: '14px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--navy)', marginBottom: '6px' }}>
+                        ✏️ Edit payment reference no. (from DuitNow / TnG app):
+                      </div>
+                      <input
+                        type="text"
+                        value={editingRefValue}
+                        onChange={(e) => {
+                          setEditingRefValue(e.target.value);
+                          if (editDuplicateError) setEditDuplicateError(null);
+                        }}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px', fontFamily: 'monospace', fontWeight: 700, marginBottom: '8px', boxSizing: 'border-box' }}
+                      />
+                      {editDuplicateError && (
+                        <div style={{ fontSize: '12px', color: '#991b1b', background: '#fee2e2', padding: '8px 12px', borderRadius: '6px', marginBottom: '8px' }}>
+                          ⚠ This reference number was already used for order <strong>#{editDuplicateError.duplicateOrderId}</strong>. The same payment can't be used twice.
+                          <button
+                            type="button"
+                            onClick={() => handleSavePaymentRef(o.orderId, true)}
+                            style={{ background: 'none', border: 'none', color: '#b91c1c', fontWeight: 800, textDecoration: 'underline', cursor: 'pointer', marginLeft: '6px' }}
+                          >
+                            Save anyway
+                          </button>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          type="button"
+                          disabled={savingRefEdit || !isValidPaymentRef(editingRefValue.trim())}
+                          onClick={() => handleSavePaymentRef(o.orderId, false)}
+                          style={{ padding: '6px 14px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 800, cursor: savingRefEdit || !isValidPaymentRef(editingRefValue.trim()) ? 'not-allowed' : 'pointer', opacity: savingRefEdit || !isValidPaymentRef(editingRefValue.trim()) ? 0.5 : 1 }}
+                        >
+                          {savingRefEdit ? 'Saving…' : 'Save Reference'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingOrderRefId(null);
+                            setEditDuplicateError(null);
+                          }}
+                          style={{ padding: '6px 12px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Actions / Receipt preview */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', paddingTop: '8px' }}>
@@ -805,7 +1437,10 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
                           <button
                             type="button"
                             onClick={() => handleApprove(o)}
-                            disabled={processingAction === o.orderId}
+                            disabled={
+                              processingAction === o.orderId ||
+                              !isValidPaymentRef((paymentRefInputs[o.orderId] ?? (o.paymentRefNo || '')).trim())
+                            }
                             style={{
                               padding: '8px 18px',
                               background: '#22c55e',
@@ -814,8 +1449,18 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
                               borderRadius: '8px',
                               fontSize: '12px',
                               fontWeight: 800,
-                              cursor: 'pointer',
+                              cursor:
+                                processingAction === o.orderId ||
+                                !isValidPaymentRef((paymentRefInputs[o.orderId] ?? (o.paymentRefNo || '')).trim())
+                                  ? 'not-allowed'
+                                  : 'pointer',
+                              opacity: isValidPaymentRef((paymentRefInputs[o.orderId] ?? (o.paymentRefNo || '')).trim()) ? 1 : 0.5,
                             }}
+                            title={
+                              !isValidPaymentRef((paymentRefInputs[o.orderId] ?? (o.paymentRefNo || '')).trim())
+                                ? 'Enter a valid payment reference number (at least 6 letters/numbers) to approve'
+                                : 'Approve order'
+                            }
                           >
                             {processingAction === o.orderId ? 'Approving…' : '✓ Approve & Unlock'}
                           </button>

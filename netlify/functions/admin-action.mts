@@ -31,6 +31,8 @@ export default async (req: Request, _context: Context): Promise<Response> => {
       action: body.action,
       reason: body.reason,
       hideFromSocialProof: body.hideFromSocialProof,
+      paymentRefNo: body.paymentRefNo,
+      forceDuplicate: body.forceDuplicate,
       adminUser: 'owner',
     });
 
