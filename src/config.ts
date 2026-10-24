@@ -83,7 +83,7 @@ export const config: SMVConfig = {
   policiesLastUpdated: "22 October 2026",
   manualPayment: {
     enabled: true,
-    accountName: "[NAME SHOWN ON QR]",
+    accountName: "Kristina Leong Siew Yin",
     reviewTime: "within 24 hours (usually much faster, 9am–10pm daily)",
   },
 };
