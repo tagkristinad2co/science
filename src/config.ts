@@ -34,6 +34,10 @@ export interface MetaConfig {
   pixelId: string;
 }
 
+export interface AdminConfig {
+  autoSendEmailOnApprove: boolean;
+}
+
 export interface SMVConfig {
   foundingEndsAt: string;
   founding: PricingTier;
@@ -50,6 +54,7 @@ export interface SMVConfig {
   onlinePaymentLabel: string;
   socialProof: SocialProofConfig;
   meta: MetaConfig;
+  admin: AdminConfig;
 }
 
 export const config: SMVConfig = {
@@ -57,6 +62,9 @@ export const config: SMVConfig = {
   founding: PRICING_CONFIG.founding,
   official: PRICING_CONFIG.official,
   onlinePaymentLabel: "Card & FPX online banking",
+  admin: {
+    autoSendEmailOnApprove: false,
+  },
   meta: {
     pixelId: "2122791698316257",
   },

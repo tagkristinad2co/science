@@ -18,6 +18,7 @@ import {
   processAdminListOrders,
   processAdminAction,
   processAdminGetReceipt,
+  processAdminSendDownloadEmail,
 } from './server-lib/manual.ts';
 import {
   checkAdminLoginRateLimit,
@@ -262,6 +263,17 @@ app.post('/api/admin/action', requireAdminAuth, async (req: Request, res: Respon
     hideFromSocialProof: req.body.hideFromSocialProof,
     paymentRefNo: req.body.paymentRefNo,
     forceDuplicate: req.body.forceDuplicate,
+    adminUser: 'owner',
+  });
+  res.status(result.status).json(result.body);
+});
+
+// 10b. POST /api/admin/send-email
+app.post('/api/admin/send-email', requireAdminAuth, async (req: Request, res: Response): Promise<void> => {
+  const siteUrl = getSiteUrl(req);
+  const result = await processAdminSendDownloadEmail(devStore, siteUrl, {
+    orderId: req.body.orderId,
+    email: req.body.email,
     adminUser: 'owner',
   });
   res.status(result.status).json(result.body);

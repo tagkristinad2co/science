@@ -220,7 +220,11 @@ export async function applyStripePaid(
       replyTo: config.business?.email || 'support.mathceria@gmail.com',
     });
 
-    await store.update(order.orderId, { emailSentAt: now });
+    await store.update(order.orderId, {
+      emailSentAt: now,
+      emailSentCount: 1,
+      emailLastSentTo: order.email,
+    });
   }
 
   // Send Telegram alert if configured

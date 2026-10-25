@@ -29,6 +29,9 @@ interface OrderItem {
   paymentRefNormalized?: string;
   paymentRefEditedAt?: string;
   stripePaymentIntentId?: string;
+  emailSentCount?: number;
+  emailLastSentTo?: string;
+  emailHistory?: Array<{ email: string; changedAt: string }>;
 }
 
 export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ onNavigate }) => {
@@ -61,6 +64,13 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
   const [editingRefValue, setEditingRefValue] = useState('');
   const [editDuplicateError, setEditDuplicateError] = useState<{ duplicateOrderId: string; message: string } | null>(null);
   const [savingRefEdit, setSavingRefEdit] = useState(false);
+
+  // Send Download Email Modal & Toast state
+  const [sendingEmailOrder, setSendingEmailOrder] = useState<OrderItem | null>(null);
+  const [sendingEmailInput, setSendingEmailInput] = useState('');
+  const [sendingEmailLoading, setSendingEmailLoading] = useState(false);
+  const [sendingEmailError, setSendingEmailError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Check login status on mount
   useEffect(() => {
@@ -299,6 +309,68 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const handleOpenSendEmailModal = (order: OrderItem) => {
+    setSendingEmailOrder(order);
+    setSendingEmailInput(order.email);
+    setSendingEmailError(null);
+  };
+
+  const handleConfirmSendEmail = async () => {
+    if (!sendingEmailOrder) return;
+    const trimmed = sendingEmailInput.trim();
+    if (!trimmed || !/^\S+@\S+\.\S+$/.test(trimmed)) {
+      setSendingEmailError('Please enter a valid email address.');
+      return;
+    }
+
+    setSendingEmailLoading(true);
+    setSendingEmailError(null);
+
+    try {
+      const res = await fetch('/api/admin/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: sendingEmailOrder.orderId,
+          email: trimmed,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setSendingEmailError(data.error || 'Failed to send email');
+        return;
+      }
+
+      // Update in-place in local orders array
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.orderId === sendingEmailOrder.orderId
+            ? {
+                ...o,
+                email: data.email || trimmed,
+                emailSentAt: data.emailSentAt,
+                emailSentCount: data.emailSentCount,
+                emailLastSentTo: data.emailLastSentTo,
+              }
+            : o
+        )
+      );
+
+      // Close modal
+      setSendingEmailOrder(null);
+
+      // Show green toast
+      setToastMessage(`✅ Download email sent to ${trimmed}`);
+      setTimeout(() => setToastMessage(null), 4000);
+    } catch (err: any) {
+      console.error('[Send email error]', err);
+      setSendingEmailError(err.message || 'Request failed. Please check network connection.');
+    } finally {
+      setSendingEmailLoading(false);
+    }
   };
 
   const handleConfirmReject = async () => {
@@ -936,6 +1008,61 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
                               💬 WhatsApp
                             </a>
                           )}
+                          {o.status === 'paid' && (
+                            <div style={{ marginTop: '4px', paddingTop: '4px', borderTop: '1px dashed #e2e8f0', width: '100%' }}>
+                              {!o.emailSentAt ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                                  <span style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecdd3', fontSize: '10px', fontWeight: 800, padding: '2px 6px', borderRadius: '4px' }}>
+                                    Email not sent yet
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenSendEmailModal(o)}
+                                    style={{
+                                      padding: '4px 10px',
+                                      background: 'var(--purple)',
+                                      color: '#ffffff',
+                                      border: 'none',
+                                      borderRadius: '6px',
+                                      fontSize: '11px',
+                                      fontWeight: 800,
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                    }}
+                                  >
+                                    📧 Send download email
+                                  </button>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-start' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenSendEmailModal(o)}
+                                    style={{
+                                      padding: '3px 8px',
+                                      background: '#ffffff',
+                                      border: '1px solid #7855f5',
+                                      color: '#7855f5',
+                                      borderRadius: '6px',
+                                      fontSize: '11px',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    Resend download email
+                                  </button>
+                                  <div style={{ fontSize: '10px', color: '#64748b', lineHeight: 1.25 }}>
+                                    Last sent: {new Date(o.emailSentAt).toLocaleString('en-MY')} to {o.emailLastSentTo || o.email}
+                                  </div>
+                                  <div style={{ fontSize: '10px', color: '#64748b' }}>
+                                    Sent {o.emailSentCount || 1} time(s)
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1467,6 +1594,66 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
                         </>
                       )}
 
+                      {/* Send / Resend download email button for paid orders */}
+                      {o.status === 'paid' && (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                          {!o.emailSentAt ? (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecdd3', fontSize: '11px', fontWeight: 800, padding: '4px 8px', borderRadius: '6px' }}>
+                                Email not sent yet
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenSendEmailModal(o)}
+                                style={{
+                                  padding: '8px 16px',
+                                  background: 'var(--purple)',
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  borderRadius: '8px',
+                                  fontSize: '12px',
+                                  fontWeight: 800,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                }}
+                              >
+                                📧 Send download email
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenSendEmailModal(o)}
+                                style={{
+                                  padding: '7px 14px',
+                                  background: '#ffffff',
+                                  border: '1px solid #7855f5',
+                                  color: '#7855f5',
+                                  borderRadius: '8px',
+                                  fontSize: '12px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                }}
+                              >
+                                Resend download email
+                              </button>
+                              <div style={{ fontSize: '10px', color: '#64748b' }}>
+                                Last sent: {new Date(o.emailSentAt).toLocaleString('en-MY')} to {o.emailLastSentTo || o.email}
+                              </div>
+                              <div style={{ fontSize: '10px', color: '#64748b' }}>
+                                Sent {o.emailSentCount || 1} time(s)
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* WhatsApp shortcut button */}
                       {o.status === 'paid' && (
                         <a
@@ -1632,6 +1819,131 @@ export const AdminPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Send Download Email Modal */}
+      {sendingEmailOrder && (
+        <div
+          className="modal open"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => {
+            if (!sendingEmailLoading) setSendingEmailOrder(null);
+          }}
+        >
+          <div
+            className="modal-card"
+            style={{ maxWidth: '440px', padding: '24px', background: '#ffffff', borderRadius: '16px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ fontSize: '18px', fontWeight: 900, color: 'var(--navy)', margin: '0 0 10px' }}>
+              📧 Send Download Email
+            </h3>
+            <p style={{ color: '#475569', fontSize: '13px', margin: '0 0 16px', lineHeight: 1.5 }}>
+              Send the download email for order <strong>#{sendingEmailOrder.orderId}</strong> to:
+            </p>
+
+            <div style={{ marginBottom: '16px' }}>
+              <input
+                type="email"
+                value={sendingEmailInput}
+                onChange={(e) => {
+                  setSendingEmailInput(e.target.value);
+                  if (sendingEmailError) setSendingEmailError(null);
+                }}
+                disabled={sendingEmailLoading}
+                placeholder="customer@example.com"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: '8px',
+                  border: sendingEmailError ? '1px solid #ef4444' : '1px solid #cbd5e1',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {sendingEmailError && (
+              <div
+                style={{
+                  marginBottom: '16px',
+                  padding: '10px 14px',
+                  background: '#fee2e2',
+                  border: '1px solid #fca5a5',
+                  borderRadius: '8px',
+                  color: '#991b1b',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  lineHeight: 1.4,
+                }}
+              >
+                {sendingEmailError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                disabled={sendingEmailLoading}
+                onClick={() => setSendingEmailOrder(null)}
+                style={{
+                  padding: '8px 16px',
+                  background: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: sendingEmailLoading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={sendingEmailLoading || !sendingEmailInput.trim()}
+                onClick={handleConfirmSendEmail}
+                style={{
+                  padding: '8px 20px',
+                  background: 'var(--purple)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                  cursor: sendingEmailLoading || !sendingEmailInput.trim() ? 'not-allowed' : 'pointer',
+                  opacity: sendingEmailLoading || !sendingEmailInput.trim() ? 0.6 : 1,
+                }}
+              >
+                {sendingEmailLoading ? 'Sending…' : 'Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Green Feedback Toast */}
+      {toastMessage && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '24px',
+            right: '24px',
+            background: '#15803d',
+            color: '#ffffff',
+            padding: '12px 20px',
+            borderRadius: '10px',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
+            fontSize: '14px',
+            fontWeight: 800,
+            zIndex: 99999,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          {toastMessage}
         </div>
       )}
     </div>

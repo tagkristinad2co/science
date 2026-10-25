@@ -167,10 +167,19 @@ ${businessName} · ${supportEmail}`;
   }
 }
 
+export function escapeHtml(str: string): string {
+  return (str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 /**
  * 2. Order Approved Email (Includes download button and link)
  */
-export async function sendOrderApprovedEmail(params: {
+export async function sendOrderApprovedEmailDetailed(params: {
   customerEmail: string;
   customerName: string;
   orderId: string;
@@ -178,18 +187,22 @@ export async function sendOrderApprovedEmail(params: {
   downloadUrl: string;
   orderPageUrl?: string;
   replyTo?: string;
-}): Promise<boolean> {
+}): Promise<{ ok: boolean; messageId?: string; error?: string }> {
   const apiKey = getEnv('RESEND_API_KEY');
   const fromEmail = getEnv('EMAIL_FROM') || 'Science Made Visual <orders@bloxmath.quest>';
 
   if (!apiKey) {
-    console.warn('[Resend Email Skipped] RESEND_API_KEY is not configured.');
-    return false;
+    const errorMsg = 'Resend API key is not configured.';
+    console.warn('[Resend Email Skipped]', errorMsg);
+    return { ok: false, error: errorMsg };
   }
 
-  const firstName = extractFirstName(params.customerName);
+  const firstName = escapeHtml(extractFirstName(params.customerName));
+  const orderIdEsc = escapeHtml(params.orderId);
+  const packEsc = escapeHtml(params.pack);
   const supportEmail = params.replyTo || config.business?.email || 'support.mathceria@gmail.com';
-  const businessName = config.business?.name || 'TRE Marketing Enterprise';
+  const supportEmailEsc = escapeHtml(supportEmail);
+  const businessName = escapeHtml(config.business?.name || 'TRE Marketing Enterprise');
 
   const subject = 'Payment confirmed – your Science Made Visual sheets are ready 🎉';
 
@@ -200,7 +213,7 @@ export async function sendOrderApprovedEmail(params: {
       </p>
       <p style="margin: 0 0 20px;">
         <a href="${params.orderPageUrl}" style="color: #7855f5; font-weight: 700; text-decoration: underline;">
-          ${params.orderPageUrl}
+          ${escapeHtml(params.orderPageUrl)}
         </a>
       </p>
     `
@@ -218,7 +231,7 @@ export async function sendOrderApprovedEmail(params: {
       </h2>
       <p style="font-size: 15px; margin: 0 0 16px;">Hi ${firstName},</p>
       <p style="font-size: 15px; margin: 0 0 20px;">
-        Your payment for order <strong>${params.orderId}</strong> (${params.pack}-sheet pack) has been confirmed! You can now download your complete science sheets collection below:
+        Your payment for order <strong>${orderIdEsc}</strong> (${packEsc}-sheet pack) has been confirmed! You can now download your complete science sheets collection below:
       </p>
 
       <div style="margin: 28px 0;">
@@ -234,16 +247,16 @@ export async function sendOrderApprovedEmail(params: {
       ${orderPageSection}
 
       <p style="color: #64748b; font-size: 13px; margin: 24px 0 8px;">
-        If you have any questions or need help opening the files, reply to this email or contact <a href="mailto:${supportEmail}" style="color: #7855f5; text-decoration: underline;">${supportEmail}</a>.
+        If you have any questions or need help opening the files, reply to this email or contact <a href="mailto:${supportEmailEsc}" style="color: #7855f5; text-decoration: underline;">${supportEmailEsc}</a>.
       </p>
 
       <div style="margin-top: 36px; padding-top: 18px; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 12px; line-height: 1.5;">
-        ${businessName} · <a href="mailto:${supportEmail}" style="color: #94a3b8; text-decoration: underline;">${supportEmail}</a>
+        ${businessName} · <a href="mailto:${supportEmailEsc}" style="color: #94a3b8; text-decoration: underline;">${supportEmailEsc}</a>
       </div>
     </div>
   `;
 
-  const text = `Hi ${firstName},
+  const text = `Hi ${extractFirstName(params.customerName)},
 
 Your payment for order ${params.orderId} (${params.pack}-sheet pack) has been confirmed!
 
@@ -254,7 +267,7 @@ Save this email so you can download again anytime.
 ${params.orderPageUrl ? `\nPrivate order page:\n${params.orderPageUrl}\n` : ''}
 Questions? Reply to this email or contact ${supportEmail}.
 
-${businessName} · ${supportEmail}`;
+${config.business?.name || 'TRE Marketing Enterprise'} · ${supportEmail}`;
 
   try {
     const res = await fetch('https://api.resend.com/emails', {
@@ -275,16 +288,36 @@ ${businessName} · ${supportEmail}`;
 
     if (!res.ok) {
       const errText = await res.text();
+      let resendMsg = errText;
+      try {
+        const errObj = JSON.parse(errText);
+        if (errObj.message) resendMsg = errObj.message;
+      } catch {}
       console.warn('[Resend Approval Email Failed]', res.status, errText);
-      return false;
+      return { ok: false, error: `Resend error: ${resendMsg}` };
     }
 
-    console.log(`[Resend Approval Email Sent] To ${params.customerEmail} for ${params.orderId}`);
-    return true;
-  } catch (err) {
+    const data = await res.json().catch(() => ({}));
+    const messageId = data?.id;
+    console.log(`[Resend Approval Email Sent] To ${params.customerEmail} for ${params.orderId} (id: ${messageId || 'unknown'})`);
+    return { ok: true, messageId };
+  } catch (err: any) {
     console.error('[Resend Approval Email Error]', err);
-    return false;
+    return { ok: false, error: `Network error: ${err.message || 'Failed to connect to email provider'}` };
   }
+}
+
+export async function sendOrderApprovedEmail(params: {
+  customerEmail: string;
+  customerName: string;
+  orderId: string;
+  pack: string;
+  downloadUrl: string;
+  orderPageUrl?: string;
+  replyTo?: string;
+}): Promise<boolean> {
+  const result = await sendOrderApprovedEmailDetailed(params);
+  return result.ok;
 }
 
 /**

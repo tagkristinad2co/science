@@ -20,6 +20,10 @@ export interface Order {
   createdAt: string;
   paidAt?: string;
   emailSentAt?: string;
+  emailSentCount?: number;
+  emailLastSentTo?: string;
+  emailHistory?: Array<{ email: string; changedAt: string }>;
+  adminEmailSends?: string[];
   pendingEmailSentAt?: string;
   rejectionEmailSentAt?: string;
   hideFromSocialProof?: boolean;

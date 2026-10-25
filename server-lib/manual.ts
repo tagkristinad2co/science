@@ -8,6 +8,7 @@ import { constantTimeTokenCompare } from './admin-auth.ts';
 import {
   sendTelegramAlert,
   sendOrderApprovedEmail,
+  sendOrderApprovedEmailDetailed,
   sendReceiptReceivedEmail,
   sendOrderRejectedEmail,
 } from './notifications.ts';
@@ -538,22 +539,29 @@ export async function processAdminAction(
     const downloadUrl = getDownloadLink(order.pack) || '';
     const orderPageUrl = `${siteUrl}/order/${order.orderId}?t=${order.accessToken}`;
 
-    // Send customer email via Resend if configured
-    sendOrderApprovedEmail({
-      customerEmail: order.email,
-      customerName: order.name,
-      orderId: order.orderId,
-      pack: order.pack,
-      downloadUrl,
-      orderPageUrl,
-      replyTo: config.business?.email,
-    })
-      .then(async (sent) => {
-        if (sent) {
-          await store.update(order.orderId, { emailSentAt: new Date().toISOString() });
-        }
+    // Send customer email via Resend if autoSendEmailOnApprove is enabled
+    if (config.admin?.autoSendEmailOnApprove) {
+      sendOrderApprovedEmail({
+        customerEmail: order.email,
+        customerName: order.name,
+        orderId: order.orderId,
+        pack: order.pack,
+        downloadUrl,
+        orderPageUrl,
+        replyTo: config.business?.email,
       })
-      .catch(console.error);
+        .then(async (sent) => {
+          if (sent) {
+            const emailTime = new Date().toISOString();
+            await store.update(order.orderId, {
+              emailSentAt: emailTime,
+              emailSentCount: 1,
+              emailLastSentTo: order.email,
+            });
+          }
+        })
+        .catch(console.error);
+    }
 
     // Send server-side Meta Conversions API purchase event
     sendMetaCapiPurchase(store, { ...order, status: 'paid', paidAt: now }, siteUrl).catch(
@@ -634,5 +642,107 @@ export async function processAdminGetReceipt(
     status: 200,
     data: receipt.data,
     contentType: receipt.contentType,
+  };
+}
+
+export async function processAdminSendDownloadEmail(
+  store: OrderStore,
+  siteUrl: string,
+  body: { orderId: string; email: string; adminUser?: string }
+): Promise<{ status: number; body: any }> {
+  const { orderId, email, adminUser } = body;
+  if (!orderId) {
+    return { status: 400, body: { error: 'Missing orderId' } };
+  }
+
+  const order = await store.get(orderId);
+  if (!order) {
+    return { status: 404, body: { error: 'Order not found' } };
+  }
+
+  // Only for orders with status "paid"
+  if (order.status !== 'paid') {
+    return { status: 400, body: { error: 'Order is not paid yet' } };
+  }
+
+  // Validate the email
+  const targetEmail = (email || '').trim().toLowerCase();
+  if (!targetEmail || !/^\S+@\S+\.\S+$/.test(targetEmail)) {
+    return { status: 400, body: { error: 'Please enter a valid email address.' } };
+  }
+
+  // Rate limiting: at most 5 admin sends per order per hour
+  const now = Date.now();
+  const oneHourAgo = now - 60 * 60 * 1000;
+  const existingSends = (order.adminEmailSends || []).filter(
+    (iso) => new Date(iso).getTime() > oneHourAgo
+  );
+
+  if (existingSends.length >= 5) {
+    return {
+      status: 429,
+      body: { error: 'Rate limit reached: at most 5 download emails can be sent per order per hour.' },
+    };
+  }
+
+  // Handle email update if changed
+  let updatedEmailHistory = order.emailHistory || [];
+  let emailChanged = false;
+  if (order.email.trim().toLowerCase() !== targetEmail) {
+    emailChanged = true;
+    updatedEmailHistory = [
+      ...updatedEmailHistory,
+      { email: order.email, changedAt: new Date().toISOString() },
+    ];
+  }
+
+  const downloadUrl = getDownloadLink(order.pack) || '';
+  const orderPageUrl = order.method === 'stripe'
+    ? `${siteUrl}/thank-you?order_id=${order.orderId}&session_id=${order.stripeSessionId || ''}`
+    : `${siteUrl}/order/${order.orderId}?t=${order.accessToken || ''}`;
+
+  const emailResult = await sendOrderApprovedEmailDetailed({
+    customerEmail: targetEmail,
+    customerName: order.name,
+    orderId: order.orderId,
+    pack: order.pack,
+    downloadUrl,
+    orderPageUrl,
+    replyTo: config.business?.email,
+  });
+
+  if (!emailResult.ok) {
+    return {
+      status: 500,
+      body: { error: emailResult.error || 'Failed to send email via Resend' },
+    };
+  }
+
+  const nowIso = new Date().toISOString();
+  const newCount = (order.emailSentCount || 0) + 1;
+  const newAdminSends = [...existingSends, nowIso];
+
+  await store.update(order.orderId, {
+    ...(emailChanged ? { email: targetEmail, emailHistory: updatedEmailHistory } : {}),
+    emailSentAt: nowIso,
+    emailSentCount: newCount,
+    emailLastSentTo: targetEmail,
+    adminEmailSends: newAdminSends,
+  });
+
+  console.log(
+    `[ADMIN AUDIT] download email sent for ${order.orderId} to ${targetEmail} by ${adminUser || 'admin'} (messageId: ${emailResult.messageId || 'unknown'})`
+  );
+
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      messageId: emailResult.messageId,
+      emailSentAt: nowIso,
+      emailSentCount: newCount,
+      emailLastSentTo: targetEmail,
+      email: targetEmail,
+    },
   };
 }
