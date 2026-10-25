@@ -49,6 +49,7 @@ export async function sendMetaCapiPurchase(
 
   // Skip if CAPI access token or pixel ID is not configured
   if (!pixelId || !accessToken) {
+    console.log('[Meta CAPI] Purchase sent: failed');
     return;
   }
 
@@ -130,17 +131,19 @@ export async function sendMetaCapiPurchase(
       body: JSON.stringify(requestBody),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       console.warn(`[Meta CAPI Warning] Event for order ${order.orderId} returned status ${res.status}:`, data);
+      console.log('[Meta CAPI] Purchase sent: failed');
     } else {
       console.log(`[Meta CAPI Success] Purchase event logged for order ${order.orderId}:`, data);
+      console.log('[Meta CAPI] Purchase sent: ok');
+      // Mark as sent so we never send twice
+      const now = new Date().toISOString();
+      await store.update(order.orderId, { capiSentAt: now });
     }
-
-    // Mark as sent so we never send twice
-    const now = new Date().toISOString();
-    await store.update(order.orderId, { capiSentAt: now });
   } catch (err) {
     console.warn(`[Meta CAPI Error] Failed to send Purchase event for order ${order.orderId}:`, err);
+    console.log('[Meta CAPI] Purchase sent: failed');
   }
 }

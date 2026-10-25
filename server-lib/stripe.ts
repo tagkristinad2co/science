@@ -4,7 +4,7 @@ import { getEnv } from './env.ts';
 import { calculatePrice } from '../shared/pricing.ts';
 import { validateCheckoutInput, generateOrderId } from './validation.ts';
 import { getDownloadLink } from './downloads.ts';
-import { sendTelegramAlert, sendOrderApprovedEmail } from './notifications.ts';
+import { sendTelegramAlert, sendOrderApprovedEmail, escapeTelegramHtml } from './notifications.ts';
 import { sendMetaCapiPurchase } from './meta-capi.ts';
 import { config } from '../src/config.ts';
 
@@ -210,35 +210,48 @@ export async function applyStripePaid(
     const downloadUrl = getDownloadLink(order.pack) || '';
     const orderPageUrl = `${siteUrl}/thank-you?order_id=${order.orderId}&session_id=${session.id}`;
 
-    await sendOrderApprovedEmail({
-      customerEmail: order.email,
-      customerName: order.name,
-      orderId: order.orderId,
-      pack: order.pack,
-      downloadUrl,
-      orderPageUrl,
-      replyTo: config.business?.email || 'support.mathceria@gmail.com',
-    });
+    try {
+      await sendOrderApprovedEmail({
+        customerEmail: order.email,
+        customerName: order.name,
+        orderId: order.orderId,
+        pack: order.pack,
+        downloadUrl,
+        orderPageUrl,
+        replyTo: config.business?.email || 'support.mathceria@gmail.com',
+      });
 
-    await store.update(order.orderId, {
-      emailSentAt: now,
-      emailSentCount: 1,
-      emailLastSentTo: order.email,
-    });
+      await store.update(order.orderId, {
+        emailSentAt: now,
+        emailSentCount: 1,
+        emailLastSentTo: order.email,
+      });
+    } catch (emailErr) {
+      console.warn('[Stripe Approval Email Error]', emailErr);
+    }
   }
 
   // Send Telegram alert if configured
   const amountRm = (order.amount / 100).toFixed(2);
-  await sendTelegramAlert(
-    `💳 Stripe sale: <b>${order.orderId}</b> · ${order.pack} sheets · RM${amountRm}`
-  );
+  try {
+    const safeOrderId = escapeTelegramHtml(order.orderId);
+    const safePack = escapeTelegramHtml(order.pack);
+    const safeName = escapeTelegramHtml(order.name);
+    await sendTelegramAlert(
+      `💳 Stripe sale: <b>${safeOrderId}</b> · ${safePack} sheets · RM${amountRm} · ${safeName}`
+    );
+  } catch (tgErr) {
+    console.warn('[Stripe Telegram Alert Error]', tgErr);
+  }
 
   // Send server-side Meta Conversions API purchase event
   order.status = 'paid';
   order.paidAt = now;
-  sendMetaCapiPurchase(store, order, siteUrl).catch((err) =>
-    console.warn('[Meta CAPI] Error in applyStripePaid:', err)
-  );
+  try {
+    await sendMetaCapiPurchase(store, order, siteUrl);
+  } catch (err) {
+    console.warn('[Meta CAPI] Error in applyStripePaid:', err);
+  }
 
   return true;
 }

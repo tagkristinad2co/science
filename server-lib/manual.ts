@@ -7,6 +7,7 @@ import { detectFileType } from './magic-bytes.ts';
 import { constantTimeTokenCompare } from './admin-auth.ts';
 import {
   sendTelegramAlert,
+  escapeTelegramHtml,
   sendOrderApprovedEmail,
   sendOrderApprovedEmailDetailed,
   sendReceiptReceivedEmail,
@@ -221,28 +222,33 @@ export async function processManualReceiptUpload(
   const amountStr = (order.amount / 100).toFixed(2);
 
   // Send "receipt received" email (never blocks upload)
-  sendReceiptReceivedEmail({
-    customerEmail: order.email,
-    customerName: order.name,
-    orderId: order.orderId,
-    pack: order.pack,
-    amount: amountStr,
-    orderPageUrl,
-    reviewTime: config.manualPayment?.reviewTime,
-    replyTo: config.business?.email,
-  })
-    .then(async (sent) => {
-      if (sent) {
-        await store.update(order.orderId, { pendingEmailSentAt: new Date().toISOString() });
-      }
-    })
-    .catch((err) => {
-      console.warn('[Receipt Received Email Error]', err);
+  try {
+    const sent = await sendReceiptReceivedEmail({
+      customerEmail: order.email,
+      customerName: order.name,
+      orderId: order.orderId,
+      pack: order.pack,
+      amount: amountStr,
+      orderPageUrl,
+      reviewTime: config.manualPayment?.reviewTime,
+      replyTo: config.business?.email,
     });
+    if (sent) {
+      await store.update(order.orderId, { pendingEmailSentAt: new Date().toISOString() });
+    }
+  } catch (err) {
+    console.warn('[Receipt Received Email Error]', err);
+  }
 
-  // Send Telegram alert if configured
-  const telegramMessage = `🧾 <b>New receipt:</b> ${order.orderId} · ${order.pack} sheets · RM${amountStr} · ${order.name}\nCheck your TnG/bank app, then approve at ${siteUrl}/admin`;
-  sendTelegramAlert(telegramMessage).catch(console.error);
+  // Send Telegram alert if configured (never blocks upload)
+  try {
+    const safeName = escapeTelegramHtml(order.name);
+    const safeRef = order.customerReference ? ` · Ref: ${escapeTelegramHtml(order.customerReference)}` : '';
+    const telegramMessage = `🧾 <b>New receipt:</b> ${escapeTelegramHtml(order.orderId)} · ${escapeTelegramHtml(order.pack)} sheets · RM${amountStr} · ${safeName}${safeRef}\nCheck your TnG/bank app, then approve at ${siteUrl}/admin`;
+    await sendTelegramAlert(telegramMessage);
+  } catch (err) {
+    console.warn('[Telegram Alert Error]', err);
+  }
 
   return {
     status: 200,
@@ -541,32 +547,35 @@ export async function processAdminAction(
 
     // Send customer email via Resend if autoSendEmailOnApprove is enabled
     if (config.admin?.autoSendEmailOnApprove) {
-      sendOrderApprovedEmail({
-        customerEmail: order.email,
-        customerName: order.name,
-        orderId: order.orderId,
-        pack: order.pack,
-        downloadUrl,
-        orderPageUrl,
-        replyTo: config.business?.email,
-      })
-        .then(async (sent) => {
-          if (sent) {
-            const emailTime = new Date().toISOString();
-            await store.update(order.orderId, {
-              emailSentAt: emailTime,
-              emailSentCount: 1,
-              emailLastSentTo: order.email,
-            });
-          }
-        })
-        .catch(console.error);
+      try {
+        const sent = await sendOrderApprovedEmail({
+          customerEmail: order.email,
+          customerName: order.name,
+          orderId: order.orderId,
+          pack: order.pack,
+          downloadUrl,
+          orderPageUrl,
+          replyTo: config.business?.email,
+        });
+        if (sent) {
+          const emailTime = new Date().toISOString();
+          await store.update(order.orderId, {
+            emailSentAt: emailTime,
+            emailSentCount: 1,
+            emailLastSentTo: order.email,
+          });
+        }
+      } catch (err) {
+        console.error('[Approve Email Error]', err);
+      }
     }
 
     // Send server-side Meta Conversions API purchase event
-    sendMetaCapiPurchase(store, { ...order, status: 'paid', paidAt: now }, siteUrl).catch(
-      (err) => console.warn('[Meta CAPI] Error in processAdminAction approve:', err)
-    );
+    try {
+      await sendMetaCapiPurchase(store, { ...order, status: 'paid', paidAt: now }, siteUrl);
+    } catch (err) {
+      console.warn('[Meta CAPI] Error in processAdminAction approve:', err);
+    }
 
     return {
       status: 200,
@@ -595,20 +604,21 @@ export async function processAdminAction(
     const orderPageUrl = `${siteUrl}/order/${order.orderId}?t=${order.accessToken}`;
 
     // Send rejection email to customer
-    sendOrderRejectedEmail({
-      customerEmail: order.email,
-      customerName: order.name,
-      orderId: order.orderId,
-      reason: cleanReason,
-      orderPageUrl,
-      replyTo: config.business?.email,
-    })
-      .then(async (sent) => {
-        if (sent) {
-          await store.update(order.orderId, { rejectionEmailSentAt: new Date().toISOString() });
-        }
-      })
-      .catch((err) => console.warn('[Rejection Email Error]', err));
+    try {
+      const sent = await sendOrderRejectedEmail({
+        customerEmail: order.email,
+        customerName: order.name,
+        orderId: order.orderId,
+        reason: cleanReason,
+        orderPageUrl,
+        replyTo: config.business?.email,
+      });
+      if (sent) {
+        await store.update(order.orderId, { rejectionEmailSentAt: new Date().toISOString() });
+      }
+    } catch (err) {
+      console.warn('[Rejection Email Error]', err);
+    }
 
     return {
       status: 200,

@@ -8,12 +8,19 @@ function extractFirstName(name: string): string {
   return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
 }
 
-export async function sendTelegramAlert(message: string): Promise<void> {
+export function escapeTelegramHtml(str: string): string {
+  return (str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+export async function sendTelegramAlert(message: string): Promise<boolean> {
   const token = getEnv('TELEGRAM_BOT_TOKEN');
   const chatId = getEnv('TELEGRAM_CHAT_ID');
 
   if (!token || !chatId) {
-    return;
+    return false;
   }
 
   try {
@@ -31,11 +38,17 @@ export async function sendTelegramAlert(message: string): Promise<void> {
     if (!res.ok) {
       const errText = await res.text();
       console.warn('[Telegram Alert Failed]', res.status, errText);
+      console.log('[Telegram] sent: failed');
+      return false;
     } else {
       console.log('[Telegram Alert Sent]');
+      console.log('[Telegram] sent: ok');
+      return true;
     }
   } catch (err) {
     console.error('[Telegram Alert Error]', err);
+    console.log('[Telegram] sent: failed');
+    return false;
   }
 }
 
@@ -58,13 +71,21 @@ export async function sendReceiptReceivedEmail(params: {
 
   if (!apiKey) {
     console.warn('[Resend Email Skipped] RESEND_API_KEY is not configured.');
+    console.log('[Email] receipt-received sent: failed');
     return false;
   }
 
   const firstName = extractFirstName(params.customerName);
+  const firstNameEsc = escapeHtml(firstName);
+  const orderIdEsc = escapeHtml(params.orderId);
+  const packEsc = escapeHtml(params.pack);
+  const amountEsc = escapeHtml(params.amount);
   const supportEmail = params.replyTo || config.business?.email || 'support.mathceria@gmail.com';
+  const supportEmailEsc = escapeHtml(supportEmail);
   const businessName = config.business?.name || 'TRE Marketing Enterprise';
+  const businessNameEsc = escapeHtml(businessName);
   const reviewTime = params.reviewTime || config.manualPayment?.reviewTime || 'within 24 hours (usually much faster, 9am–10pm daily)';
+  const reviewTimeEsc = escapeHtml(reviewTime);
 
   const subject = `We've received your payment receipt – Order ${params.orderId}`;
 
@@ -78,22 +99,22 @@ export async function sendReceiptReceivedEmail(params: {
       <h2 style="color: #101d3d; font-size: 24px; font-weight: 900; margin: 0 0 16px; line-height: 1.25;">
         We've received your payment receipt
       </h2>
-      <p style="font-size: 15px; margin: 0 0 16px;">Hi ${firstName},</p>
+      <p style="font-size: 15px; margin: 0 0 16px;">Hi ${firstNameEsc},</p>
       <p style="font-size: 15px; margin: 0 0 20px;">
         Thank you for your order! We've received your payment receipt and we're now checking the payment.
       </p>
 
       <!-- Summary Box -->
       <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px 20px; margin: 24px 0;">
-        <div style="font-size: 14px; margin-bottom: 8px;"><strong>Order number:</strong> ${params.orderId}</div>
-        <div style="font-size: 14px; margin-bottom: 8px;"><strong>Collection:</strong> ${params.pack} illustrated science sheets</div>
-        <div style="font-size: 14px; margin-bottom: 8px;"><strong>Amount:</strong> RM${params.amount}</div>
+        <div style="font-size: 14px; margin-bottom: 8px;"><strong>Order number:</strong> ${orderIdEsc}</div>
+        <div style="font-size: 14px; margin-bottom: 8px;"><strong>Collection:</strong> ${packEsc} illustrated science sheets</div>
+        <div style="font-size: 14px; margin-bottom: 8px;"><strong>Amount:</strong> RM${amountEsc}</div>
         <div style="font-size: 14px; margin-bottom: 8px;"><strong>Payment method:</strong> DuitNow / Touch 'n Go QR</div>
         <div style="font-size: 14px;"><strong>Status:</strong> ⏳ Pending payment confirmation</div>
       </div>
 
       <p style="font-size: 15px; margin: 0 0 24px;">
-        What happens next: we'll confirm your payment ${reviewTime}. As soon as it's approved, you'll get another email with your download link.
+        What happens next: we'll confirm your payment ${reviewTimeEsc}. As soon as it's approved, you'll get another email with your download link.
       </p>
 
       <div style="margin: 28px 0;">
@@ -106,11 +127,11 @@ export async function sendReceiptReceivedEmail(params: {
         Please keep this email. Your order page link is private, so don't share it.
       </p>
       <p style="color: #64748b; font-size: 13px; margin: 0 0 24px;">
-        Questions? Just reply to this email or contact <a href="mailto:${supportEmail}" style="color: #7855f5; text-decoration: underline;">${supportEmail}</a>.
+        Questions? Just reply to this email or contact <a href="mailto:${supportEmailEsc}" style="color: #7855f5; text-decoration: underline;">${supportEmailEsc}</a>.
       </p>
 
       <div style="margin-top: 36px; padding-top: 18px; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 12px; line-height: 1.5;">
-        ${businessName} · <a href="mailto:${supportEmail}" style="color: #94a3b8; text-decoration: underline;">${supportEmail}</a>
+        ${businessNameEsc} · <a href="mailto:${supportEmailEsc}" style="color: #94a3b8; text-decoration: underline;">${supportEmailEsc}</a>
       </div>
     </div>
   `;
@@ -156,13 +177,16 @@ ${businessName} · ${supportEmail}`;
     if (!res.ok) {
       const errText = await res.text();
       console.warn('[Resend Receipt Received Failed]', res.status, errText);
+      console.log('[Email] receipt-received sent: failed');
       return false;
     }
 
     console.log(`[Resend Receipt Received Sent] To ${params.customerEmail} for ${params.orderId}`);
+    console.log('[Email] receipt-received sent: ok');
     return true;
   } catch (err) {
     console.error('[Resend Receipt Received Error]', err);
+    console.log('[Email] receipt-received sent: failed');
     return false;
   }
 }
